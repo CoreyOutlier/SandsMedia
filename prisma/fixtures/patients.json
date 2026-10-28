@@ -1,0 +1,254 @@
+[
+  {
+    "id": "DS-0141",
+    "name": "Jordan Alvarez",
+    "pal": 0,
+    "sessions": [
+      {
+        "date": "2026-10-19",
+        "tx": "Porcelain veneers",
+        "notes": "Final seat, 10 upper veneers in shade BL2. Retracted and natural smile shots, plus a reveal clip.",
+        "by": "Nadia",
+        "consent": true,
+        "status": "ready",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          },
+          {
+            "k": "other",
+            "v": true
+          }
+        ]
+      },
+      {
+        "date": "2026-10-05",
+        "tx": "Porcelain veneers",
+        "notes": "Temporaries placed. Patient approved the mock-up chairside.",
+        "by": "Nadia",
+        "consent": true,
+        "status": "posted",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          }
+        ]
+      },
+      {
+        "date": "2026-09-21",
+        "tx": "Porcelain veneers",
+        "notes": "Smile design consult. Baseline photos with retractors and full face.",
+        "by": "Nadia",
+        "consent": true,
+        "status": "posted",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "before"
+          },
+          {
+            "k": "other"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "DS-0138",
+    "name": "Priya Bennett",
+    "pal": 1,
+    "sessions": [
+      {
+        "date": "2026-10-12",
+        "tx": "Teeth whitening",
+        "notes": "In-office whitening, three shades lighter. Photos taken same day.",
+        "by": "Tom",
+        "consent": true,
+        "status": "posted",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          },
+          {
+            "k": "testimonial",
+            "v": true
+          }
+        ],
+        "quote": "Three shades lighter in one visit and no sensitivity at all. I keep catching myself smiling at my own camera."
+      }
+    ]
+  },
+  {
+    "id": "DS-0133",
+    "name": "Marcus Chen",
+    "pal": 2,
+    "sessions": [
+      {
+        "date": "2026-10-08",
+        "tx": "Invisalign",
+        "notes": "Tray 1 fitted. Consent form not signed yet, chase at next visit.",
+        "by": "Nadia",
+        "consent": false,
+        "status": "hold",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "DS-0129",
+    "name": "Simone Delacroix",
+    "pal": 3,
+    "sessions": [
+      {
+        "date": "2026-10-05",
+        "tx": "Dental bonding",
+        "notes": "Chipped lateral incisors rebuilt same day. Close-up and natural smile.",
+        "by": "Tom",
+        "consent": true,
+        "status": "ready",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          },
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "DS-0124",
+    "name": "Luca Ferreira",
+    "pal": 4,
+    "sessions": [
+      {
+        "date": "2026-09-30",
+        "tx": "Smile makeover",
+        "notes": "Veneers, whitening and gum recontouring complete. Final reveal photos.",
+        "by": "Nadia",
+        "consent": true,
+        "status": "ready",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          },
+          {
+            "k": "testimonial",
+            "v": true
+          }
+        ],
+        "quote": "I hid my teeth in every photo for twenty years. Not anymore."
+      },
+      {
+        "date": "2026-07-08",
+        "tx": "Smile makeover",
+        "notes": "Treatment plan photos before anything started.",
+        "by": "Nadia",
+        "consent": true,
+        "status": "posted",
+        "photos": [
+          {
+            "k": "before"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "DS-0119",
+    "name": "Mei Huang",
+    "pal": 5,
+    "sessions": [
+      {
+        "date": "2026-09-26",
+        "tx": "Gum contouring",
+        "notes": "Laser recontouring. Two week healing photos.",
+        "by": "Tom",
+        "consent": true,
+        "status": "ready",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "DS-0112",
+    "name": "Daniel Okafor",
+    "pal": 6,
+    "sessions": [
+      {
+        "date": "2026-09-14",
+        "tx": "Dental implants",
+        "notes": "Crown seated on the front tooth. Patient prefers no social use for now.",
+        "by": "Nadia",
+        "consent": false,
+        "status": "hold",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "DS-0107",
+    "name": "Elena Rossi",
+    "pal": 7,
+    "sessions": [
+      {
+        "date": "2026-09-02",
+        "tx": "Invisalign",
+        "notes": "Refinement complete, retainers delivered.",
+        "by": "Tom",
+        "consent": true,
+        "status": "posted",
+        "photos": [
+          {
+            "k": "before"
+          },
+          {
+            "k": "after"
+          }
+        ]
+      }
+    ]
+  }
+]

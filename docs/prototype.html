@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dr. Sands Beverly Hills | Photo Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#FAF8F4;--surface:#FFFFFF;--surface2:#F2EEE7;--ink:#1F1C18;--muted:#7A7269;--line:#E7E1D7;--line2:#D5CDC0;
+  --accent:#A4843F;--accent-ink:#FFFFFF;--accent-soft:#F4EDDC;--accent-text:#7E6327;--primary:#1F1C18;--primary-ink:#FFFFFF;
+  --warn:#8D5200;--warn-soft:#FBEFD9;--danger:#A33A2F;
+  --sans:"Albert Sans",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --radius:10px;--tile:14px;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+/* Light only. No dark overrides, so the viewer's theme setting cannot darken the portal. */
+:root[data-theme="dark"]{color-scheme:light}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent-text)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Shell */
+.app{display:flex;min-height:100%}
+.rail{display:none}
+.main{flex:1;min-width:0;padding:0 0 calc(72px + env(safe-area-inset-bottom,0px))}
+.topbar{display:flex;align-items:baseline;justify-content:space-between;padding:18px 18px 6px}
+.brand{font-family:var(--serif);font-weight:600;font-size:27px;line-height:1;letter-spacing:.01em}
+.clinic{font-size:12px;color:var(--muted);letter-spacing:.04em;margin-top:4px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--line);padding:6px 10px calc(8px + env(safe-area-inset-bottom,0px));z-index:5}
+.tabbar button{flex:1;background:none;border:0;padding:8px 4px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabbar button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.tabbar button.on{color:var(--accent-text)}
+.view{display:none;padding:8px 18px 24px;max-width:600px}
+.view.on{display:block}
+h1{font-family:var(--serif);font-weight:500;font-size:38px;line-height:1.02;letter-spacing:0;margin:14px 0 6px}
+h2{font-size:17px;font-weight:600;margin:28px 0 10px}
+.lede{color:var(--muted);margin:0 0 18px;font-size:15px}
+.hint{font-size:13px;color:var(--muted);margin:8px 0 0}
+
+/* Fields */
+.field{margin:0 0 18px}
+.field label{display:block;font-weight:500;margin-bottom:6px}
+.in{width:100%;border:1px solid var(--line2);background:var(--surface);border-radius:var(--radius);padding:12px 13px;font-size:16px;min-height:46px}
+.in:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+textarea.in{resize:vertical;min-height:88px}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.btn{border:1px solid var(--line2);background:var(--surface);border-radius:var(--radius);padding:11px 16px;font-weight:500;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,opacity .15s}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--primary);color:var(--primary-ink);border-color:var(--primary)}
+.btn.primary:hover{opacity:.9;background:var(--primary)}
+.btn.primary:disabled{background:var(--line);border-color:var(--line);color:var(--muted);cursor:not-allowed;opacity:1}
+.btn.quiet{border-color:transparent;background:transparent;color:var(--accent-text);padding:8px 10px;min-height:36px}
+.btn.quiet:hover{background:var(--accent-soft)}
+.btn.sm{padding:7px 12px;min-height:34px;font-size:14px}
+.btn.block{width:100%}
+.btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+/* Patient picker */
+.picker{position:relative}
+.menu{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--line2);border-radius:var(--radius);box-shadow:0 10px 30px rgba(0,0,0,.12);z-index:4;max-height:260px;overflow:auto;display:none}
+.menu.on{display:block}
+.menu button{display:flex;width:100%;text-align:left;background:none;border:0;padding:11px 13px;gap:10px;align-items:center;border-bottom:1px solid var(--line)}
+.menu button:last-child{border-bottom:0}
+.menu button:hover,.menu button:focus-visible{background:var(--surface2);outline:none}
+.menu .id{color:var(--muted);font-size:13px;margin-left:auto}
+.menu .new{color:var(--accent-text);font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:8px;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:7px 8px 7px 12px;font-weight:500}
+.chip button{background:none;border:0;color:inherit;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;padding:0}
+.chip button:hover{background:rgba(0,0,0,.08)}
+.chip .id{font-weight:400;opacity:.8;font-size:13px}
+
+/* Photos */
+.drop{border:1.5px dashed var(--line2);border-radius:var(--tile);padding:26px 16px;text-align:center;background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop svg{width:30px;height:30px;stroke:var(--accent-text);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.drop strong{font-weight:500}
+.drop span{font-size:13px;color:var(--muted)}
+.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+.tile{position:relative;border-radius:var(--tile);overflow:hidden;background:var(--surface2);aspect-ratio:1}
+.tile img,.tile .ph{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tile .ph{background:linear-gradient(160deg,var(--ph1),var(--ph2))}
+.tile .x{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;padding:0}
+.tile .x svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round}
+.cyc{position:absolute;left:8px;bottom:8px;border:0;background:#fff;color:#172220;font-size:13px;font-weight:600;padding:7px 10px 7px 11px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.cyc svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.6}
+.tile .tag{position:absolute;left:8px;top:8px;background:rgba(10,14,12,.72);color:#fff;font-size:12px;font-weight:500;padding:4px 8px;border-radius:6px;backdrop-filter:blur(6px)}
+
+/* Consent: the one loud thing */
+.consent{margin:24px 0 10px;border:1px solid var(--line2);border-radius:var(--tile);background:var(--surface);overflow:hidden;transition:border-color .2s,background .2s}
+.consent.ok{border-color:var(--accent);background:var(--accent-soft)}
+.consent label{display:flex;gap:14px;padding:18px 16px;cursor:pointer;align-items:flex-start}
+.consent input{appearance:none;width:26px;height:26px;border:2px solid var(--line2);border-radius:7px;background:var(--surface);flex:none;margin-top:4px;display:grid;place-items:center;transition:background .15s,border-color .15s}
+.consent input:checked{background:var(--accent);border-color:var(--accent)}
+.consent input:checked::after{content:"";width:12px;height:7px;border-left:2.5px solid var(--accent-ink);border-bottom:2.5px solid var(--accent-ink);transform:rotate(-45deg) translate(1px,-1px)}
+.consent .text{font-family:var(--serif);font-weight:500;font-size:25px;line-height:1.18}
+.consent .text em{font-style:italic}
+.consent .sub{display:flex;gap:10px;align-items:center;padding:0 16px 16px 56px;font-size:14px;color:var(--muted)}
+.consent .sub input{width:18px;height:18px;border-radius:5px;margin:0}
+.consent .sub input:checked::after{width:9px;height:5px;border-width:2px}
+.consent.ok .sub{color:var(--accent-text)}
+.note{font-size:13px;color:var(--muted);margin:6px 0 20px}
+
+.play{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.play span{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.92);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.play svg{width:16px;height:16px;fill:#1F1C18;margin-left:3px}
+.tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.clear{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;margin:12px 0 0;font-weight:500}
+.clear.ok{background:var(--accent-soft);color:var(--accent-text)}
+.clear.hold{background:var(--warn-soft);color:var(--warn)}
+.clear svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.clear small{display:block;font-weight:400;font-size:13px;opacity:.85}
+
+/* Share page (what a text-message recipient sees) */
+body.share .rail,body.share .tabbar,body.share .topbar,body.share .demo{display:none}
+body.share .main{padding-bottom:0}
+#share.view{max-width:720px;margin:0 auto;padding:18px 18px 40px}
+.sh-head{text-align:center;padding:12px 0 20px}
+.sh-head .brand{font-size:32px}
+.sh-head .clinic{margin-top:6px}
+.sh-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;margin:0 0 14px}
+.sh-title{font-family:var(--serif);font-weight:500;font-size:32px;line-height:1.05;margin:0 0 2px}
+.sh-meta{color:var(--muted);font-size:14px;margin:0 0 14px}
+.sh-sess{font-weight:600;margin:18px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.sh-sess span{font-weight:400;color:var(--muted);font-size:14px}
+.cmp{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:4/3;background:var(--surface2);margin:0 0 10px;touch-action:none}
+.cmp .ph,.cmp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cmp .ph{background:linear-gradient(160deg,var(--ph1),var(--ph2))}
+.cmp .after{clip-path:inset(0 0 0 var(--cut,50%))}
+.cmp .bar{position:absolute;top:0;bottom:0;left:var(--cut,50%);width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.15);transform:translateX(-1px)}
+.cmp .knob{position:absolute;top:50%;left:var(--cut,50%);transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);display:grid;place-items:center}
+.cmp .knob svg{width:16px;height:16px;stroke:#1F1C18;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cmp input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:ew-resize}
+.cmp .lbl{position:absolute;top:10px;background:rgba(10,14,12,.7);color:#fff;font-size:12px;font-weight:500;padding:4px 8px;border-radius:6px;pointer-events:none}
+.cmp .lbl.l{left:10px}.cmp .lbl.r{right:10px}
+.sh-actions{display:flex;gap:8px;margin-top:14px}
+.sh-actions .btn{flex:1}
+.sh-foot{text-align:center;color:var(--muted);font-size:13px;padding:10px 0 0;line-height:1.6}
+.sh-note{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 14px}
+
+/* Success */
+.done{text-align:left;padding:8px 0}
+.done .mark{width:56px;height:56px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;margin:14px 0 18px}
+.done .mark svg{width:28px;height:28px;stroke:var(--accent-text);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.path{font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin:16px 0 22px;line-height:1.7}
+.path .sep{color:var(--muted);margin:0 6px}
+.path .files{color:var(--muted);font-size:14px;margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
+
+/* Patients */
+.search{position:relative;margin:4px 0 14px}
+.search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:1.75;stroke-linecap:round}
+.search .in{padding-left:40px}
+.filters{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
+.filters+.filters{margin-bottom:14px}
+.filters button{border:1px solid var(--line2);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;color:var(--muted)}
+.filters button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.plist{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.plist li{border-bottom:1px solid var(--line)}
+.plist button{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:12px 2px}
+.plist button:hover{background:var(--surface2)}
+.plist button.on{background:var(--accent-soft)}
+.avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(160deg,var(--ph1),var(--ph2));display:grid;place-items:center;color:#fff;font-weight:600;font-size:14px;letter-spacing:.02em}
+.pname{font-weight:500}
+.pmeta{font-size:13px;color:var(--muted);margin-top:1px}
+.badge{font-size:12px;font-weight:500;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.badge.ok{background:var(--accent-soft);color:var(--accent-text)}
+.badge.hold{background:var(--warn-soft);color:var(--warn)}
+.badge.posted{background:var(--surface2);color:var(--muted)}
+.empty{padding:40px 12px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--ink);font-weight:500;margin-bottom:4px}
+
+/* Patient detail */
+.detail{display:none}
+.back{margin:4px 0 8px;margin-left:-10px}
+.dhead{display:flex;flex-direction:column;gap:12px;margin:0 0 6px}
+.dhead h1{margin:0}
+.dmeta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:14px}
+.dactions{display:flex;gap:8px;flex-wrap:wrap}
+.stat{display:flex;gap:18px;margin:14px 0 4px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stat div{display:flex;flex-direction:column}
+.stat b{font-weight:600;font-size:20px;line-height:1.1}
+.stat span{font-size:12px;color:var(--muted)}
+.session{padding:20px 0 8px;border-bottom:1px solid var(--line)}
+.session:last-child{border-bottom:0}
+.shead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.shead h3{margin:0;font-size:17px;font-weight:600}
+.shead p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.status{border:1px solid var(--line2);background:var(--surface);border-radius:999px;padding:5px 30px 5px 11px;font-size:13px;font-weight:500;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%2364716C' stroke-width='1.6' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 11px center}
+.status.posted{background-color:var(--surface2)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.pair .tile{aspect-ratio:4/3}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.strip .tile{aspect-ratio:1}
+.quote{font-family:var(--serif);font-weight:500;font-size:22px;line-height:1.28;padding:14px 16px;border-left:3px solid var(--accent);background:var(--surface);border-radius:0 var(--radius) var(--radius) 0;margin:0 0 10px}
+.notes{font-size:15px;margin:0 0 12px}
+.caption{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;font-size:14px;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:flex-end;margin-bottom:8px}
+.caption p{margin:0;flex:1;align-self:stretch}
+.toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(10px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:9;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.saving{display:flex;align-items:center;gap:10px}
+.spin{width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;opacity:.8;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.demo{font-size:12px;color:var(--muted);padding:12px 18px 0}
+.demo button{background:none;border:0;color:var(--accent-text);padding:0;font-size:12px;text-decoration:underline}
+
+/* Desktop */
+@media (min-width:880px){
+  .app{height:100%}
+  .rail{display:flex;flex-direction:column;width:232px;flex:none;border-right:1px solid var(--line);background:var(--surface);padding:22px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+  .rail .brand{padding:0 8px 2px}
+  .rail .clinic{padding:0 8px 22px}
+  .rail nav{display:flex;flex-direction:column;gap:2px}
+  .rail nav button{display:flex;align-items:center;gap:10px;background:none;border:0;padding:10px 10px;border-radius:8px;font-weight:500;color:var(--muted);text-align:left}
+  .rail nav button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .rail nav button.on{background:var(--accent-soft);color:var(--accent-text)}
+  .rail nav button:hover:not(.on){background:var(--surface2)}
+  .rail .foot{margin-top:auto;padding:12px 8px 0;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+  .rail .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:7px}
+  .main{padding:0;overflow:auto}
+  .topbar,.tabbar,.demo{display:none}
+  .toast{bottom:28px}
+  .view{padding:34px 40px 48px;max-width:none}
+  #upload.view{max-width:620px}
+  .grid{grid-template-columns:repeat(3,1fr)}
+  /* two-pane directory */
+  #patients.view{display:none}
+  #patients.view.on{display:grid;grid-template-columns:360px 1fr;gap:40px;align-items:start;max-width:1180px}
+  .dir{position:sticky;top:34px}
+  .detail{display:block}
+  .detail .back{display:none}
+  .pair{max-width:620px}
+  .strip{max-width:520px}
+  .caption{flex-direction:row;align-items:flex-start;gap:10px}
+  .dhead{flex-direction:row;justify-content:space-between;align-items:flex-end}
+}
+@media (max-width:879px){
+  #patients.view.on.showing .dir{display:none}
+  #patients.view.on.showing .detail{display:block}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">Dr. Sands</div>
+    <div class="clinic">Cosmetic Dentistry, Beverly Hills</div>
+    <nav>
+      <button data-go="upload" class="on"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>Upload</button>
+      <button data-go="patients"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Patients</button>
+    </nav>
+    <div class="foot">
+      <div><span class="dot"></span>Drive connected</div>
+      <div>Drive: Posting Center › Patients</div>
+      <button class="btn quiet sm" id="resetA" style="align-self:flex-start;margin-left:-10px">Reset demo data</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><div><div class="brand">Dr. Sands</div><div class="clinic">Cosmetic Dentistry, Beverly Hills</div></div></div>
+
+    <!-- UPLOAD -->
+    <section id="upload" class="view on">
+      <div id="form">
+        <h1>New upload</h1>
+        <p class="lede">Photos go straight into the patient’s Drive folder.</p>
+
+        <div class="field">
+          <label for="pq">Who is this for?</label>
+          <div class="picker" id="picker">
+            <input class="in" id="pq" placeholder="Start typing a name or ID" autocomplete="off">
+            <div class="menu" id="pmenu"></div>
+          </div>
+          <div id="pchip" style="margin-top:10px"></div>
+        </div>
+
+        <div class="field">
+          <label>Photos</label>
+          <label class="drop" id="drop" for="files">
+            <svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg>
+            <strong>Take a photo or video, or choose from library</strong>
+            <span>Photos and short clips. As many as you need.</span>
+            <input type="file" id="files" accept="image/*,video/*" capture="environment" multiple>
+          </label>
+          <div class="grid" id="tiles"></div>
+          <p class="hint" id="tilehint" style="display:none">Tap the label on each photo to set Before, After or Testimonial, so pairs line up later.</p>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="tx">Treatment</label>
+            <input class="in" id="tx" placeholder="e.g. Porcelain veneers" list="txl">
+            <datalist id="txl"><option>Porcelain veneers</option><option>Teeth whitening</option><option>Invisalign</option><option>Smile makeover</option><option>Dental bonding</option><option>Dental implants</option><option>Crowns</option><option>Gum contouring</option></datalist>
+          </div>
+          <div class="field">
+            <label for="dt">Date</label>
+            <input class="in" id="dt" type="date">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="desc">Description</label>
+          <textarea class="in" id="desc" placeholder="What was done, which visit this is, anything the social team should know"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="by">Uploaded by</label>
+          <input class="in" id="by" placeholder="Your name">
+        </div>
+
+        <div class="consent" id="consent">
+          <label><input type="checkbox" id="ck"><span class="text">This patient has agreed <em>in writing</em> that these photos can be shared publicly.</span></label>
+          <div class="sub"><input type="checkbox" id="ck2"><span>Signed form is in their file</span></div>
+        </div>
+        <p class="note" id="cnote">Nothing can be posted until this is ticked. Photos still save to Drive either way.</p>
+
+        <button class="btn primary block" id="save" disabled>Save to Drive</button>
+      </div>
+
+      <div id="done" class="done" style="display:none"></div>
+    </section>
+
+    <!-- PATIENTS -->
+    <section id="patients" class="view">
+      <div class="dir">
+        <h1>Patients</h1>
+        <div class="search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input class="in" id="q" placeholder="Search name, ID or treatment" autocomplete="off">
+        </div>
+        <div class="filters" id="filters">
+          <button data-f="all" class="on">All</button>
+          <button data-f="ready">Cleared for social</button>
+          <button data-f="hold">Not cleared</button>
+          <button data-f="posted">Posted</button>
+        </div>
+        <div class="filters" id="mfilters">
+          <button data-m="all" class="on">All media</button>
+          <button data-m="photo">Photos</button>
+          <button data-m="video">Videos</button>
+        </div>
+        <ul class="plist" id="plist"></ul>
+      </div>
+      <div class="detail" id="detail"></div>
+    </section>
+
+    <!-- SHARE PAGE -->
+    <section id="share" class="view"></section>
+
+    <div class="demo">Preview with sample data. <button id="resetB">Reset demo data</button></div>
+  </main>
+</div>
+
+<nav class="tabbar">
+  <button data-go="upload" class="on"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>Upload</button>
+  <button data-go="patients"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Patients</button>
+</nav>
+<div class="toast" id="toast"></div>
+<script>
+(function(){
+  var CLINIC = "Dr. Sands, Beverly Hills";
+  var PAL = [["#D9CDBC","#A58C6C"],["#CFC8BF","#8C8278"],["#E0CFC4","#B08A78"],["#D4D1C6","#8F9078"],["#DCD0D0","#A3878A"],["#CDCBD4","#858297"],["#E2D6C0","#B49C66"],["#D3D7CF","#879284"]];
+  var SEED = [
+    {id:"DS-0141",name:"Jordan Alvarez",pal:0,sessions:[
+      {date:"2026-10-19",tx:"Porcelain veneers",notes:"Final seat, 10 upper veneers in shade BL2. Retracted and natural smile shots, plus a reveal clip.",by:"Nadia",consent:true,status:"ready",photos:[{k:"before"},{k:"after"},{k:"other",v:true}]},
+      {date:"2026-10-05",tx:"Porcelain veneers",notes:"Temporaries placed. Patient approved the mock-up chairside.",by:"Nadia",consent:true,status:"posted",photos:[{k:"before"},{k:"after"}]},
+      {date:"2026-09-21",tx:"Porcelain veneers",notes:"Smile design consult. Baseline photos with retractors and full face.",by:"Nadia",consent:true,status:"posted",photos:[{k:"before"},{k:"before"},{k:"other"}]}]},
+    {id:"DS-0138",name:"Priya Bennett",pal:1,sessions:[
+      {date:"2026-10-12",tx:"Teeth whitening",notes:"In-office whitening, three shades lighter. Photos taken same day.",by:"Tom",consent:true,status:"posted",photos:[{k:"before"},{k:"after"},{k:"testimonial",v:true}],quote:"Three shades lighter in one visit and no sensitivity at all. I keep catching myself smiling at my own camera."}]},
+    {id:"DS-0133",name:"Marcus Chen",pal:2,sessions:[
+      {date:"2026-10-08",tx:"Invisalign",notes:"Tray 1 fitted. Consent form not signed yet, chase at next visit.",by:"Nadia",consent:false,status:"hold",photos:[{k:"before"},{k:"after"}]}]},
+    {id:"DS-0129",name:"Simone Delacroix",pal:3,sessions:[
+      {date:"2026-10-05",tx:"Dental bonding",notes:"Chipped lateral incisors rebuilt same day. Close-up and natural smile.",by:"Tom",consent:true,status:"ready",photos:[{k:"before"},{k:"after"},{k:"before"},{k:"after"}]}]},
+    {id:"DS-0124",name:"Luca Ferreira",pal:4,sessions:[
+      {date:"2026-09-30",tx:"Smile makeover",notes:"Veneers, whitening and gum recontouring complete. Final reveal photos.",by:"Nadia",consent:true,status:"ready",photos:[{k:"before"},{k:"after"},{k:"testimonial",v:true}],quote:"I hid my teeth in every photo for twenty years. Not anymore."},
+      {date:"2026-07-08",tx:"Smile makeover",notes:"Treatment plan photos before anything started.",by:"Nadia",consent:true,status:"posted",photos:[{k:"before"}]}]},
+    {id:"DS-0119",name:"Mei Huang",pal:5,sessions:[
+      {date:"2026-09-26",tx:"Gum contouring",notes:"Laser recontouring. Two week healing photos.",by:"Tom",consent:true,status:"ready",photos:[{k:"before"},{k:"after"}]}]},
+    {id:"DS-0112",name:"Daniel Okafor",pal:6,sessions:[
+      {date:"2026-09-14",tx:"Dental implants",notes:"Crown seated on the front tooth. Patient prefers no social use for now.",by:"Nadia",consent:false,status:"hold",photos:[{k:"before"},{k:"after"}]}]},
+    {id:"DS-0107",name:"Elena Rossi",pal:7,sessions:[
+      {date:"2026-09-02",tx:"Invisalign",notes:"Refinement complete, retainers delivered.",by:"Tom",consent:true,status:"posted",photos:[{k:"before"},{k:"after"}]}]}
+  ];
+
+  var S = {patients:[], pick:null, tiles:[], filter:"all", media:"all", q:"", cur:null, showing:false, nextId:142};
+  function reset(){ S.patients = JSON.parse(JSON.stringify(SEED)); S.pick=null; S.tiles=[]; S.cur=null; S.showing=false; S.nextId=142; renderAll(); }
+
+  var $ = function(id){ return document.getElementById(id); };
+  function fmt(d){ var p=d.split("-"); var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return (+p[2])+" "+m[+p[1]-1]+" "+p[0]; }
+  function today(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  function initials(n){ return n.split(" ").map(function(w){return w[0];}).join("").slice(0,2).toUpperCase(); }
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+  function label(k){ return {before:"Before",after:"After",testimonial:"Testimonial",other:"Other"}[k]; }
+  function folder(name){ var p=name.split(" "); return p.slice(1).join(" ")+", "+p[0]; }
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(t._h); t._h=setTimeout(function(){t.classList.remove("on");},2200); }
+  function pstatus(p){ var hold=p.sessions.some(function(s){return !s.consent;}); var ready=p.sessions.some(function(s){return s.consent&&s.status==="ready";}); if(!p.sessions.every(function(s){return s.consent;})) return "hold"; return ready?"ready":"posted"; }
+  function photoCount(p){ return p.sessions.reduce(function(a,s){return a+s.photos.filter(function(x){return !x.v;}).length;},0); }
+  function videoCount(p){ return p.sessions.reduce(function(a,s){return a+s.photos.filter(function(x){return x.v;}).length;},0); }
+  function hasTx(p,q){ return p.sessions.some(function(s){return s.tx.toLowerCase().indexOf(q)>-1;}); }
+  function shortName(n){ var w=n.split(" "); return w[0]+" "+w[w.length-1][0]+"."; }
+  function lastDate(p){ return p.sessions.map(function(s){return s.date;}).sort().reverse()[0]; }
+
+  /* Navigation */
+  function go(v){
+    document.querySelectorAll(".view").forEach(function(el){ el.classList.toggle("on", el.id===v); });
+    document.querySelectorAll("[data-go]").forEach(function(b){ b.classList.toggle("on", b.dataset.go===v); });
+    if(location.hash!=="#"+v) history.replaceState(null,"","#"+v);
+    document.body.classList.toggle("share", v==="share");
+    if(v==="patients"){ renderList(); renderDetail(); }
+    if(v==="share"){ renderShare(); }
+    window.scrollTo(0,0);
+  }
+  document.querySelectorAll("[data-go]").forEach(function(b){ b.addEventListener("click",function(){ go(b.dataset.go); }); });
+  $("resetA").addEventListener("click",function(){ reset(); toast("Demo data reset"); });
+  $("resetB").addEventListener("click",function(){ reset(); toast("Demo data reset"); });
+
+  /* ---------- Upload ---------- */
+  var pq=$("pq"), pmenu=$("pmenu");
+  function tileStyle(pal,k){ var c=PAL[pal%PAL.length]; return "--ph1:"+c[0]+";--ph2:"+c[1]+(k==="after"?";filter:brightness(1.08) saturate(1.05)":""); }
+
+  function renderMenu(){
+    var q=pq.value.trim().toLowerCase();
+    if(!q){ pmenu.classList.remove("on"); pmenu.innerHTML=""; return; }
+    var hits=S.patients.filter(function(p){ return p.name.toLowerCase().indexOf(q)>-1 || p.id.toLowerCase().indexOf(q)>-1; }).slice(0,6);
+    var html=hits.map(function(p){ return '<button data-pid="'+p.id+'"><span class="avatar" style="width:32px;height:32px;border-radius:9px;font-size:12px;'+tileStyle(p.pal)+'">'+initials(p.name)+'</span><span>'+esc(p.name)+'</span><span class="id">'+p.id+'</span></button>'; }).join("");
+    var exact=hits.some(function(p){return p.name.toLowerCase()===q;});
+    if(!exact && q.length>1) html+='<button data-new="1"><span class="new">Add “'+esc(pq.value.trim())+'” as a new patient</span></button>';
+    pmenu.innerHTML=html; pmenu.classList.add("on");
+  }
+  pq.addEventListener("input",renderMenu);
+  pq.addEventListener("focus",renderMenu);
+  document.addEventListener("click",function(e){ if(!$("picker").contains(e.target)) pmenu.classList.remove("on"); });
+  pmenu.addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    if(b.dataset.new){ S.pick={isNew:true,name:pq.value.trim()}; }
+    else { S.pick=S.patients.filter(function(p){return p.id===b.dataset.pid;})[0]; }
+    pq.value=""; pmenu.classList.remove("on"); renderChip(); validate();
+  });
+  function renderChip(){
+    var c=$("pchip");
+    if(!S.pick){ c.innerHTML=""; pq.style.display=""; return; }
+    pq.style.display="none";
+    c.innerHTML='<span class="chip">'+esc(S.pick.name)+(S.pick.isNew?' <span class="id">new patient</span>':' <span class="id">'+S.pick.id+'</span>')+'<button aria-label="Change patient" id="unpick"><svg viewBox="0 0 24 24" width="14" height="14" style="stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></span>';
+    $("unpick").addEventListener("click",function(){ S.pick=null; renderChip(); validate(); pq.focus(); });
+  }
+
+  /* Photos */
+  var files=$("files"), drop=$("drop");
+  files.addEventListener("change",function(){ addFiles(files.files); files.value=""; });
+  ["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev,function(e){ e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev,function(e){ e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop",function(e){ if(e.dataTransfer&&e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+  function addFiles(list){
+    for(var i=0;i<list.length;i++){ var f=list[i]; if(!/^(image|video)\//.test(f.type)) continue; var isV=/^video\//.test(f.type); S.tiles.push({url:URL.createObjectURL(f), k:isV?"testimonial":(S.tiles.length%2===0?"before":"after"), name:f.name, v:isV}); }
+    renderTiles(); validate();
+  }
+  function renderTiles(){
+    var g=$("tiles");
+    g.innerHTML=S.tiles.map(function(t,i){
+      return '<div class="tile">'+(t.v?'<video src="'+t.url+'" muted playsinline preload="metadata"></video><div class="play"><span><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></span></div>':'<img src="'+t.url+'" alt="">')+'<button class="x" data-rm="'+i+'" aria-label="Remove"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button><button class="cyc" data-cy="'+i+'" aria-label="Change label">'+label(t.k)+'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.6-5.7L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.6 5.7L4 16"/><path d="M4 20v-4h4"/></svg></button></div>';
+    }).join("");
+    $("tilehint").style.display=S.tiles.length?"block":"none";
+  }
+  $("tiles").addEventListener("click",function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    if(b.dataset.rm!==undefined){ S.tiles.splice(+b.dataset.rm,1); renderTiles(); validate(); return; }
+    if(b.dataset.cy!==undefined){ var o=["before","after","testimonial","other"]; var t=S.tiles[+b.dataset.cy]; t.k=o[(o.indexOf(t.k)+1)%o.length]; renderTiles(); }
+  });
+
+  /* Consent + validation */
+  var ck=$("ck"), ck2=$("ck2"), consent=$("consent");
+  function syncConsent(){ consent.classList.toggle("ok", ck.checked); $("cnote").textContent = ck.checked ? "This session will be marked ready to post." : "Nothing can be posted until this is ticked. Photos still save to Drive either way."; }
+  ck.addEventListener("change",function(){ if(!ck.checked) ck2.checked=false; syncConsent(); });
+  ck2.addEventListener("change",function(){ if(ck2.checked) ck.checked=true; syncConsent(); });
+  ["tx","by"].forEach(function(id){ $(id).addEventListener("input",validate); });
+  function validate(){ $("save").disabled = !(S.pick && S.tiles.length && $("by").value.trim()); }
+
+  /* Save */
+  $("save").addEventListener("click",function(){
+    var btn=$("save"); btn.disabled=true; btn.innerHTML='<span class="saving"><span class="spin"></span>Saving to Drive</span>';
+    setTimeout(function(){
+      var p=S.pick;
+      if(p.isNew){ p={id:"DS-"+String(S.nextId++).padStart(4,"0"),name:p.name,pal:S.patients.length%PAL.length,sessions:[]}; S.patients.unshift(p); }
+      var sess={date:$("dt").value||today(), tx:$("tx").value.trim()||"Untitled session", notes:$("desc").value.trim(), by:$("by").value.trim(), consent:ck.checked, formOnFile:ck2.checked, status:ck.checked?"ready":"hold", photos:S.tiles.map(function(t){return {k:t.k,url:t.url,v:!!t.v};})};
+      p.sessions.unshift(sess);
+      var fname=sess.date+" "+sess.tx;
+      var counts={}; var names=sess.photos.map(function(ph){ counts[ph.k]=(counts[ph.k]||0)+1; return ph.k+"-"+String(counts[ph.k]).padStart(2,"0")+(ph.v?".mp4":".jpg"); });
+      $("form").style.display="none";
+      $("done").style.display="block";
+      $("done").innerHTML='<div class="mark"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div><h1>Saved to Drive</h1><p class="lede">'+sess.photos.length+' file'+(sess.photos.length===1?"":"s")+' filed for '+esc(p.name)+(sess.consent?'. Cleared for social.':'. Not cleared for social yet.')+'</p>'+
+        '<div class="path">Posting Center<span class="sep">›</span>Patients<span class="sep">›</span>'+esc(folder(p.name))+' '+p.id+'<span class="sep">›</span>'+esc(fname)+'<div class="files">'+names.join(" &nbsp;·&nbsp; ")+(sess.consent?' &nbsp;·&nbsp; consent.json':'')+'</div></div>'+
+        '<div class="row"><button class="btn primary" id="again">Upload another</button><button class="btn" id="viewp">View patient</button></div>';
+      $("again").addEventListener("click",resetForm);
+      $("viewp").addEventListener("click",function(){ resetForm(); S.cur=p.id; S.showing=true; go("patients"); });
+      btn.innerHTML="Save to Drive";
+      S.cur=p.id;
+    },1300);
+  });
+  function resetForm(){
+    S.pick=null; S.tiles=[]; renderChip(); renderTiles(); ck.checked=false; ck2.checked=false; syncConsent();
+    ["tx","desc","by"].forEach(function(id){ $(id).value=""; }); $("dt").value=today();
+    $("form").style.display=""; $("done").style.display="none"; validate();
+  }
+
+  /* ---------- Patients ---------- */
+  $("q").addEventListener("input",function(){ S.q=$("q").value.trim().toLowerCase(); renderList(); });
+  $("filters").addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; S.filter=b.dataset.f; document.querySelectorAll("#filters button").forEach(function(x){x.classList.toggle("on",x===b);}); renderList(); renderDetail(); });
+  $("mfilters").addEventListener("click",function(e){ var b=e.target.closest("button"); if(!b) return; S.media=b.dataset.m; document.querySelectorAll("#mfilters button").forEach(function(x){x.classList.toggle("on",x===b);}); renderList(); renderDetail(); });
+  function visible(){
+    return S.patients.filter(function(p){
+      var st=pstatus(p);
+      if(S.filter==="ready"&&st!=="ready") return false;
+      if(S.filter==="hold"&&st!=="hold") return false;
+      if(S.filter==="posted"&&st!=="posted") return false;
+      if(S.media==="video"&&!videoCount(p)) return false;
+      if(S.media==="photo"&&!photoCount(p)) return false;
+      if(S.q && p.name.toLowerCase().indexOf(S.q)<0 && p.id.toLowerCase().indexOf(S.q)<0 && !hasTx(p,S.q)) return false;
+      return true;
+    }).sort(function(a,b){ return lastDate(b).localeCompare(lastDate(a)); });
+  }
+  function badge(st){ return {ready:'<span class="badge ok">Cleared for social</span>',hold:'<span class="badge hold">Not cleared</span>',posted:'<span class="badge posted">Cleared, all posted</span>'}[st]; }
+  function clearance(p,st){ var holds=p.sessions.filter(function(s){return !s.consent;}).length;
+    if(st==="hold") return '<div class="clear hold"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg><div>Not cleared for social<small>'+holds+' session'+(holds===1?"":"s")+' without signed consent. Nothing from this patient can be posted.</small></div></div>';
+    return '<div class="clear ok"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><div>Cleared for social<small>Written consent on file for every session. Safe to post and share.</small></div></div>'; }
+  function renderList(){
+    var list=visible(); var ul=$("plist");
+    if(!list.length){ ul.innerHTML='<li><div class="empty"><strong>No patients match</strong>Try a shorter search, or add them from the upload screen.</div></li>'; return; }
+    if(!S.cur || !S.patients.some(function(p){return p.id===S.cur;})) S.cur=list[0].id;
+    ul.innerHTML=list.map(function(p){
+      return '<li><button data-open="'+p.id+'" class="'+(p.id===S.cur?"on":"")+'"><span class="avatar" style="'+tileStyle(p.pal)+'">'+initials(p.name)+'</span><span><div class="pname">'+esc(p.name)+'</div><div class="pmeta">'+p.id+' · '+photoCount(p)+' photos'+(videoCount(p)?', '+videoCount(p)+' video'+(videoCount(p)===1?"":"s"):'')+' · '+fmt(lastDate(p))+'</div></span>'+badge(pstatus(p))+'</button></li>';
+    }).join("");
+  }
+  $("plist").addEventListener("click",function(e){ var b=e.target.closest("button[data-open]"); if(!b) return; S.cur=b.dataset.open; S.showing=true; renderList(); renderDetail(); window.scrollTo(0,0); });
+
+  function renderDetail(){
+    var d=$("detail"); var sec=$("patients"); sec.classList.toggle("showing",S.showing);
+    var p=S.patients.filter(function(x){return x.id===S.cur;})[0];
+    if(!p){ d.innerHTML=""; return; }
+    var st=pstatus(p), photos=photoCount(p), vids=videoCount(p);
+    var html='<button class="btn quiet back" id="back"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>Patients</button>'+
+      '<div class="dhead"><div><h1>'+esc(p.name)+'</h1><div class="dmeta">'+p.id+'</div></div>'+
+      '<div class="dactions"><button class="btn sm primary" id="shareBtn"><svg viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/></svg>Share</button><button class="btn sm" id="drive"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open in Drive</button><button class="btn sm" id="dl"><svg viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg>Download all</button></div></div>'+
+      clearance(p,st)+
+      '<div class="stat"><div><b>'+p.sessions.length+'</b><span>sessions</span></div><div><b>'+photos+'</b><span>photos</span></div><div><b>'+vids+'</b><span>videos</span></div><div><b>'+p.sessions.filter(function(s){return s.status==="posted";}).length+'</b><span>posted</span></div></div>'+
+      '<p class="hint" style="margin:8px 0 0">Share sends a private link by text: his wordmark, this patient’s cleared sessions only, a before/after slider, expires in 7 days. <a href="#share" id="shprev">Preview the share page</a></p>';
+    html+=p.sessions.map(function(s,si){
+      var befores=s.photos.filter(function(x){return x.k==="before";}), afters=s.photos.filter(function(x){return x.k==="after";}), extras=s.photos.filter(function(x){return x.k!=="before"&&x.k!=="after";});
+      var n=Math.max(befores.length,afters.length), pairs="";
+      for(var i=0;i<n;i++){ pairs+='<div class="pair">'+tile(p,befores[i],"before")+tile(p,afters[i],"after")+'</div>'; }
+      if(S.media==="video"){ befores=[];afters=[];extras=s.photos.filter(function(x){return x.v;}); n=0; pairs=""; }
+      if(S.media==="photo"){ extras=extras.filter(function(x){return !x.v;}); }
+      var strip=extras.length?'<div class="strip">'+extras.map(function(x){return tile(p,x,x.k);}).join("")+'</div>':"";
+      var sel=s.consent?'<select class="status '+(s.status==="posted"?"posted":"")+'" data-si="'+si+'"><option value="ready"'+(s.status==="ready"?" selected":"")+'>Ready to post</option><option value="posted"'+(s.status==="posted"?" selected":"")+'>Posted</option></select>':'<span class="badge hold">Needs consent</span>';
+      var cap="Before and after: "+s.tx.toLowerCase()+" at "+CLINIC+". "+(s.notes?s.notes+" ":"")+"Shared with the patient’s written consent.";
+      return '<div class="session"><div class="shead"><div><h3>'+fmt(s.date)+' · '+esc(s.tx)+'</h3><p>Uploaded by '+esc(s.by)+(s.consent?' · consent signed':'')+'</p></div>'+sel+'</div>'+pairs+strip+
+        (s.quote?'<blockquote class="quote">“'+esc(s.quote)+'”</blockquote>':"")+(s.notes?'<p class="notes">'+esc(s.notes)+'</p>':"")+
+        (s.consent?'<div class="caption"><p>'+esc(cap)+'</p><button class="btn quiet sm" data-cap="'+esc(cap)+'">Copy caption</button></div>':"")+'</div>';
+    }).join("");
+    d.innerHTML=html;
+    $("back").addEventListener("click",function(){ S.showing=false; renderDetail(); });
+    $("drive").addEventListener("click",function(){ toast("Opens Patients › "+folder(p.name)+" in Drive"); });
+    $("shareBtn").addEventListener("click",function(){ sharePatient(p); });
+    $("shprev").addEventListener("click",function(e){ e.preventDefault(); go("share"); });
+    $("dl").addEventListener("click",function(){ toast("Zipping "+photos+" originals"); });
+    d.querySelectorAll("select.status").forEach(function(sl){ sl.addEventListener("change",function(){ p.sessions[+sl.dataset.si].status=sl.value; renderList(); renderDetail(); toast(sl.value==="posted"?"Marked posted":"Marked ready to post"); }); });
+    d.querySelectorAll("[data-cap]").forEach(function(b){ b.addEventListener("click",function(){ try{ navigator.clipboard.writeText(b.dataset.cap); }catch(e){} toast("Caption copied"); }); });
+  }
+  function tile(p,ph,k){
+    if(!ph) return '<div class="tile" style="background:var(--surface2);display:grid;place-items:center;color:var(--muted);font-size:13px">No '+label(k).toLowerCase()+' yet</div>';
+    var inner=ph.url?(ph.v?'<video src="'+ph.url+'" muted playsinline preload="metadata"></video>':'<img src="'+ph.url+'" alt="">'):'<div class="ph" style="'+tileStyle(p.pal,k)+'"></div>';
+    var play=ph.v?'<div class="play"><span><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></span></div>':'';
+    return '<div class="tile">'+inner+play+'<span class="tag">'+(ph.v?(k==="other"?"Video":label(k)+" video"):label(k))+'</span></div>';
+  }
+
+  /* ---------- Share ---------- */
+  function shareUrl(p){ return location.origin+location.pathname+"#share"; }
+  function sharePatient(p){
+    var url=shareUrl(p), text="Before and after for "+shortName(p.name)+" at Dr. Sands. Private link, expires in 7 days.";
+    if(navigator.share){ navigator.share({title:"Dr. Sands: "+shortName(p.name),text:text,url:url}).then(function(){ toast("Shared"); }).catch(function(){}); return; }
+    try{ navigator.clipboard.writeText(url); }catch(e){}
+    toast("Private link copied. Expires in 7 days");
+  }
+  function cmp(p,b,a){
+    return '<div class="cmp" style="--cut:50%">'+(b.url?'<img class="before" src="'+b.url+'" alt="">':'<div class="ph before" style="'+tileStyle(p.pal,"before")+'"></div>')+(a.url?'<img class="after" src="'+a.url+'" alt="">':'<div class="ph after" style="'+tileStyle(p.pal,"after")+'"></div>')+
+      '<div class="bar"></div><div class="knob"><svg viewBox="0 0 24 24"><path d="m9 7-5 5 5 5"/><path d="m15 7 5 5-5 5"/></svg></div><span class="lbl l">Before</span><span class="lbl r">After</span><input type="range" min="2" max="98" value="50" aria-label="Compare before and after"></div>';
+  }
+  function renderShare(){
+    var p=S.patients.filter(function(x){return x.id===S.cur;})[0]||S.patients[0]; var sec=$("share");
+    var cleared=p.sessions.filter(function(s){return s.consent;}), hidden=p.sessions.length-cleared.length;
+    var exp=new Date(); exp.setDate(exp.getDate()+7);
+    var html='<div class="sh-head"><div class="brand">Dr. Sands</div><div class="clinic">Cosmetic Dentistry, Beverly Hills</div></div>'+
+      '<div class="sh-card"><h2 class="sh-title" style="margin-top:0">'+esc(shortName(p.name))+'</h2><p class="sh-meta">'+p.id+' · '+cleared.length+' cleared session'+(cleared.length===1?"":"s")+' · shared by Lumineo</p>'+
+      (hidden?'<div class="sh-note">'+hidden+' session'+(hidden===1?" is":"s are")+' hidden because consent is not on file.</div>':'');
+    html+=cleared.map(function(s){
+      var b=s.photos.filter(function(x){return x.k==="before"&&!x.v;}), a=s.photos.filter(function(x){return x.k==="after"&&!x.v;}), rest=s.photos.filter(function(x){return x.v||(x.k!=="before"&&x.k!=="after");});
+      var out='<div class="sh-sess">'+esc(s.tx)+'<span>'+fmt(s.date)+'</span></div>';
+      if(b.length&&a.length) out+=cmp(p,b[0],a[0]);
+      var more=[]; for(var i=1;i<Math.max(b.length,a.length);i++){ if(b[i]) more.push(tile(p,b[i],"before")); if(a[i]) more.push(tile(p,a[i],"after")); }
+      rest.forEach(function(x){ more.push(tile(p,x,x.k)); });
+      if(more.length) out+='<div class="strip">'+more.join("")+'</div>';
+      if(s.quote) out+='<blockquote class="quote">“'+esc(s.quote)+'”</blockquote>';
+      return out;
+    }).join("");
+    html+='<div class="sh-actions"><button class="btn primary" id="shDl">Download all</button><button class="btn" id="shBack">Back to portal</button></div></div>'+
+      '<p class="sh-foot">Private link for the person it was sent to. Expires '+fmt(exp.toISOString().slice(0,10))+'. Shared with the patient’s written consent.</p>';
+    sec.innerHTML=html;
+    sec.querySelectorAll(".cmp input").forEach(function(r){ r.addEventListener("input",function(){ r.parentNode.style.setProperty("--cut", r.value+"%"); }); });
+    $("shDl").addEventListener("click",function(){ toast("Zipping cleared files"); });
+    $("shBack").addEventListener("click",function(){ go("patients"); });
+  }
+
+  function renderAll(){ renderChip(); renderTiles(); syncConsent(); validate(); $("dt").value=today(); renderList(); renderDetail(); }
+  reset();
+  var h=(location.hash||"#upload").slice(1); go(h==="patients"||h==="share"?h:"upload");
+  window.addEventListener("hashchange",function(){ var v=(location.hash||"#upload").slice(1); if(v==="upload"||v==="patients"||v==="share") go(v); });
+})();
+</script>
+</body>
+</html>

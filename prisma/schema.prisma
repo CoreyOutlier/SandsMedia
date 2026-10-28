@@ -1,0 +1,204 @@
+// Step 1 review draft. No migration has been applied.
+// DATABASE_URL will be supplied through prisma.config.ts, never embedded here.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SessionStatus {
+  hold
+  ready
+  posted
+}
+
+enum MediaKind {
+  photo
+  video
+}
+
+enum MediaLabel {
+  before
+  after
+  testimonial
+  other
+}
+
+model Clinic {
+  id                 String    @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String    @unique
+  uploadPasscodeHash  String    @map("upload_passcode_hash")
+  driveRootFolderId  String    @unique @map("drive_root_folder_id")
+  // Increment atomically in the same transaction that creates a patient.
+  nextPatientNumber Int       @default(1) @map("next_patient_number")
+  patients           Patient[]
+  generalUploads     GeneralUpload[]
+
+  @@map("clinics")
+}
+
+model Patient {
+  id                 String      @id @default(uuid()) @db.Uuid
+  clinicId           String      @map("clinic_id") @db.Uuid
+  displayId          String      @map("display_id")
+  firstName          String      @map("first_name")
+  lastName           String      @map("last_name")
+  // Nullable only while Drive provisioning is incomplete.
+  driveFolderId      String?     @unique @map("drive_folder_id")
+  consentWithdrawnAt DateTime?   @map("consent_withdrawn_at") @db.Timestamptz(3)
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  clinic             Clinic      @relation(fields: [clinicId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessions           Session[]
+  shareLinks         ShareLink[]
+
+  // Clearance is derived, never a mutable column.
+  @@unique([clinicId, displayId])
+  @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("patients")
+}
+
+model Session {
+  id               String         @id @default(uuid()) @db.Uuid
+  patientId        String         @map("patient_id") @db.Uuid
+  // Required by upload step 4: retries reuse the existing session.
+  uploadId         String         @unique @map("upload_id") @db.Uuid
+  date             DateTime       @db.Date
+  treatment        String
+  description      String         @default("")
+  // Stores the prototype's testimonial separately from clinical description.
+  testimonialQuote String?        @map("testimonial_quote")
+  uploadedBy       String         @map("uploaded_by")
+  driveFolderId    String?        @unique @map("drive_folder_id")
+  status           SessionStatus  @default(hold)
+  finishedAt       DateTime?      @map("finished_at") @db.Timestamptz(3)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  media            Media[]
+  consentEvents    ConsentEvent[]
+
+  @@index([patientId, date(sort: Desc)])
+  @@index([treatment(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("sessions")
+}
+
+model Media {
+  id          String     @id @default(uuid()) @db.Uuid
+  sessionId   String     @map("session_id") @db.Uuid
+  kind        MediaKind
+  label       MediaLabel
+  driveFileId String     @unique @map("drive_file_id")
+  // Generated label-counter name in Drive, never an original device filename.
+  fileName    String     @map("file_name")
+  // Stable upload order for before/after pairing and retry deduplication.
+  position    Int
+  width       Int?
+  height      Int?
+  durationS   Float?     @map("duration_s")
+  bytes       BigInt
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  session     Session    @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([sessionId, position])
+  @@unique([sessionId, fileName])
+  @@index([sessionId, kind])
+  @@map("media")
+}
+
+// INSERT and SELECT only. The migration must also install the SQL guards.
+// Never expose Prisma update/delete/upsert operations for this model.
+model ConsentEvent {
+  id                 String   @id @default(uuid()) @db.Uuid
+  sessionId          String   @map("session_id") @db.Uuid
+  consented          Boolean
+  formOnFile         Boolean  @map("form_on_file")
+  consentTextVersion Int      @map("consent_text_version")
+  // Immutable snapshot retains the exact sentence alongside its version.
+  consentText        String   @map("consent_text")
+  consentedBy        String   @map("consented_by")
+  ip                 String   @db.Inet
+  userAgent          String   @map("user_agent")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  session            Session  @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([sessionId, createdAt])
+  @@map("consent_events")
+}
+
+model ShareLink {
+  id           String      @id @default(uuid()) @db.Uuid
+  patientId    String      @map("patient_id") @db.Uuid
+  // SHA-256 hex digest of a token generated from 32 cryptographic random bytes.
+  // The raw token is never persisted.
+  tokenHash    String      @unique @map("token_hash") @db.Char(64)
+  pinHash      String?     @map("pin_hash")
+  createdBy    String      @map("created_by")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt    DateTime    @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '7 days')")) @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime?   @map("revoked_at") @db.Timestamptz(3)
+  viewCount    Int         @default(0) @map("view_count")
+  lastViewedAt DateTime?   @map("last_viewed_at") @db.Timestamptz(3)
+  patient      Patient     @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  views        ShareView[]
+
+  @@index([patientId, revokedAt, expiresAt])
+  @@map("share_links")
+}
+
+model ShareView {
+  id          String    @id @default(uuid()) @db.Uuid
+  shareLinkId String    @map("share_link_id") @db.Uuid
+  ip          String    @db.Inet
+  userAgent   String    @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([shareLinkId, createdAt])
+  @@map("share_views")
+}
+
+// Owner-requested second library, 2026-10-28. No patient identity or implied
+// patient/social clearance; no public sharing is enabled for this library.
+model GeneralUpload {
+  id            String         @id @default(uuid()) @db.Uuid
+  clinicId      String         @map("clinic_id") @db.Uuid
+  uploadId      String         @unique @map("upload_id") @db.Uuid
+  title         String
+  description   String         @default("")
+  uploadedBy    String         @map("uploaded_by")
+  date          DateTime       @db.Date
+  driveFolderId String?        @unique @map("drive_folder_id")
+  finishedAt    DateTime?      @map("finished_at") @db.Timestamptz(3)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  clinic        Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  media         GeneralMedia[]
+
+  @@index([clinicId, date(sort: Desc)])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("general_uploads")
+}
+
+model GeneralMedia {
+  id              String        @id @default(uuid()) @db.Uuid
+  generalUploadId String        @map("general_upload_id") @db.Uuid
+  kind            MediaKind
+  driveFileId     String        @unique @map("drive_file_id")
+  fileName        String        @map("file_name")
+  position        Int
+  width           Int?
+  height          Int?
+  durationS       Float?        @map("duration_s")
+  bytes           BigInt
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  generalUpload   GeneralUpload @relation(fields: [generalUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([generalUploadId, position])
+  @@unique([generalUploadId, fileName])
+  @@index([generalUploadId, kind])
+  @@map("general_media")
+}
