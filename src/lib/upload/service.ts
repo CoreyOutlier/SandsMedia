@@ -16,18 +16,19 @@ async function ownedBatch(tx:Tx,id:string,identity:Identity,lockPatient=false) {
   if(batch.session){
     if(lockPatient){
       await lock(tx,`patient:${batch.session.patientId}`);
-      // Re-read after the shared patient lock: archive/withdraw may have won
+      // Re-read after the shared patient lock: an archive may have won
       // while this upload request was waiting for its batch lock.
       batch.session.patient=await tx.patient.findUniqueOrThrow({where:{id:batch.session.patientId}});
     }
     if(batch.session.patient.archivedAt)throw new UploadError("PATIENT_ARCHIVED",409);
-    if(lockPatient&&batch.session.patient.consentWithdrawnAt)throw new UploadError("CONSENT_WITHDRAWN",409);
+    // Social consent never gates private storage. Withdrawal remains in force
+    // until explicitly renewed through the patient's consent controls.
   }
   return batch;
 }
 function payload(batch:Awaited<ReturnType<typeof ownedBatch>>) {
   const item=batch.session??batch.generalUpload!;
-  return {id:batch.id,general:!!batch.generalUpload,finished:!!item.finishedAt,date:item.date.toISOString().slice(0,10),title:batch.session?.treatment??batch.generalUpload!.title,description:item.description,uploadedBy:item.uploadedBy,consented:batch.consented,formOnFile:batch.formOnFile,patient:batch.session?{id:batch.session.patient.id,firstName:batch.session.patient.firstName,lastName:batch.session.patient.lastName,displayId:batch.session.patient.displayId}:null,files:(batch.manifest as unknown as FilePlan[]).map(({encryptedUrl,...file})=>file)};
+  return {id:batch.id,general:!!batch.generalUpload,finished:!!item.finishedAt,date:item.date.toISOString().slice(0,10),title:batch.session?.treatment??batch.generalUpload!.title,description:item.description,uploadedBy:item.uploadedBy,consented:batch.consented,formOnFile:batch.formOnFile,patient:batch.session?{id:batch.session.patient.id,firstName:batch.session.patient.firstName,lastName:batch.session.patient.lastName,displayId:batch.session.patient.displayId,consentWithdrawn:!!batch.session.patient.consentWithdrawnAt}:null,files:(batch.manifest as unknown as FilePlan[]).map(({encryptedUrl,...file})=>file)};
 }
 export async function getBatch(id:string,identity:Identity) { return payload(await ownedBatch(database(),id,identity)); }
 export async function startBatch(raw:unknown,identity:Identity) {
@@ -49,7 +50,6 @@ export async function startBatch(raw:unknown,identity:Identity) {
         patient=await tx.patient.create({data:{clinicId:c.id,displayId:`DS-${String(c.nextPatientNumber-1).padStart(4,"0")}`,firstName:data.firstName,lastName:data.lastName}});
       }
       if(patient.archivedAt) throw new UploadError("PATIENT_ARCHIVED",409);
-      if(patient.consentWithdrawnAt) throw new UploadError("CONSENT_WITHDRAWN",409);
       const s=await tx.session.create({data:{uploadId:data.uploadId,patientId:patient.id,treatment:data.title,description:data.description,uploadedBy:data.uploadedBy,date:new Date(data.date)}}); sessionId=s.id;
     }
     const batch=await tx.uploadBatch.create({data:{id:data.uploadId,clinicId:identity.clinic.id,sessionId,generalUploadId,principalHash:identity.principalHash,consented:data.consented,formOnFile:data.formOnFile,manifest:data.files as unknown as Prisma.InputJsonValue},include});
@@ -85,7 +85,6 @@ export async function signFile(id:string,key:string,identity:Identity) {
   return database().$transaction(async tx=>{
     await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true);
     if((batch.session??batch.generalUpload!).finishedAt) throw new UploadError("UPLOAD_FINISHED",409);
-    if(batch.session?.patient.consentWithdrawnAt) throw new UploadError("CONSENT_WITHDRAWN",409);
     const files=batch.manifest as unknown as FilePlan[]; const file=files.find(f=>f.key===key); if(!file)throw new UploadError("FILE_NOT_FOUND",404);
     const dirs=await provision(tx,batch,identity); const parent=file.kind==="photo"?dirs.photos:dirs.videos;
     if(!file.driveId) file.driveId=await reserveFileId();
@@ -126,7 +125,6 @@ export async function finishBatch(id:string,identity:Identity,request:Request) {
     await lock(tx,`batch:${id}`);const batch=await ownedBatch(tx,id,identity,true);
     const files=batch.manifest as unknown as FilePlan[];
     if(!files.every(f=>f.confirmed))throw new UploadError("UPLOAD_INCOMPLETE",409);
-    if(batch.session?.patient.consentWithdrawnAt)throw new UploadError("CONSENT_WITHDRAWN",409);
     if(batch.session && batch.consented && !await tx.consentEvent.findFirst({where:{sessionId:batch.session.id,renewalId:null}})){
       const address=request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()??"";
       await tx.consentEvent.create({data:{sessionId:batch.session.id,consented:true,formOnFile:batch.formOnFile,consentText:CONSENT_TEXT,consentTextVersion:CONSENT_TEXT_VERSION,consentedBy:batch.session.uploadedBy,ip:isIP(address)?address:"0.0.0.0",userAgent:(request.headers.get("user-agent")??"unknown").slice(0,500)}});
@@ -136,7 +134,6 @@ export async function finishBatch(id:string,identity:Identity,request:Request) {
     await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true); const item=batch.session??batch.generalUpload!;
     const files=batch.manifest as unknown as FilePlan[];
     if(!files.every(f=>f.confirmed) || !item.driveFolderId) throw new UploadError("UPLOAD_INCOMPLETE",409);
-    if(batch.session?.patient.consentWithdrawnAt) throw new UploadError("CONSENT_WITHDRAWN",409);
     if(batch.session && batch.consented) {
       const event=await tx.consentEvent.findFirstOrThrow({where:{sessionId:batch.session.id,renewalId:null}});
       await writeConsentFile(item.driveFolderId,event.id,{eventId:event.id,patientId:batch.session.patient.displayId,sessionDate:item.date.toISOString().slice(0,10),consentText:event.consentText,consentTextVersion:event.consentTextVersion,consentedBy:event.consentedBy,formOnFile:event.formOnFile,timestamp:event.createdAt.toISOString(),ip:event.ip,userAgent:event.userAgent});
@@ -144,12 +141,12 @@ export async function finishBatch(id:string,identity:Identity,request:Request) {
       await appendConsentMirror(identity.clinic.driveRootFolderId,event.id,[batch.session.patient.displayId,item.date.toISOString().slice(0,10),String(event.consentTextVersion),event.consentText,event.consentedBy,String(event.formOnFile),event.createdAt.toISOString(),event.ip,event.userAgent]);
     }
     if(!item.finishedAt) {
-      if(batch.session) await tx.session.update({where:{id:item.id},data:{finishedAt:new Date(),status:batch.consented?"ready":"hold"}});
+      if(batch.session) await tx.session.update({where:{id:item.id},data:{finishedAt:new Date(),status:batch.consented&&!batch.session.patient.consentWithdrawnAt?"ready":"hold"}});
       else await tx.generalUpload.update({where:{id:item.id},data:{finishedAt:new Date()}});
     }
     const folder=await getDriveFile(item.driveFolderId);
     if(!folder?.name || folder.trashed)throw new UploadError("DRIVE_UNAVAILABLE",503);
     const patient=batch.session?.patient;
-    return {saved:true,count:files.length,consented:batch.consented,general:!!batch.generalUpload,patientId:patient?.id,driveUrl:`https://drive.google.com/drive/folders/${item.driveFolderId}`,path:`Posting Center / ${patient?`Patients / ${patientFolderName(patient.firstName,patient.lastName,patient.displayId)}`:"Other uploads"} / ${folder.name}`};
+    return {saved:true,count:files.length,consented:batch.consented,consentWithdrawn:!!patient?.consentWithdrawnAt,general:!!batch.generalUpload,patientId:patient?.id,driveUrl:`https://drive.google.com/drive/folders/${item.driveFolderId}`,path:`Posting Center / ${patient?`Patients / ${patientFolderName(patient.firstName,patient.lastName,patient.displayId)}`:"Other uploads"} / ${folder.name}`};
   },{timeout:60000});
 }

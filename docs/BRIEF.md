@@ -260,3 +260,12 @@ Additional acceptance tests for these clarified requirements:
   title; two distinct titled folders remain searchable without overwriting files.
 - [ ] Patient Photos/Videos filters work across visits; Other uploads title search
   returns its matching batch and the media-kind filter shows only matching files.
+
+### Owner clarification — private uploads and posting consent (29 October 2026)
+
+Consent controls posting and external sharing, not private storage. Staff can add
+photos and videos to a patient whose consent is missing or withdrawn. Private
+uploads must not clear a withdrawal, revive share links, or mark the new session
+ready to post while withdrawal remains in force. Recording consent for an upload
+does not replace the explicit patient-level consent renewal action. Archived
+patients still need to be restored before adding media.

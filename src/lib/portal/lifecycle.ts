@@ -89,7 +89,9 @@ async function renewConsent(id:string,identity:Identity,body:Record<string,unkno
   }
   if(!canCompleteRenewal(p,prepared.version))throw new UploadError("CONSENT_RENEWAL_STALE",409);
   await tx.patient.update({where:{id},data:{consentWithdrawnAt:null,lifecycleVersion:{increment:1}}});
-  await tx.session.updateMany({where:{id:{in:events.map(e=>e.sessionId)},status:"hold"},data:{status:"ready"}});
+  // A private upload may finish while renewal copies are reaching Drive. Include
+  // completed sessions with their own consent; never clear an unconsented upload.
+  await tx.session.updateMany({where:{patientId:id,finishedAt:{not:null},consentEvents:{some:{consented:true}},status:"hold"},data:{status:"ready"}});
   await tx.patientActivity.create({data:{patientId:id,action:"consent_renewed",actor:identity.email,operationId,patientVersion:prepared.version+1}});
   // No ShareLink update: links revoked by withdrawal remain revoked forever.
  },{maxWait:10000,timeout:20000});

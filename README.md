@@ -394,3 +394,17 @@ and ZIP artifacts remain under ignored environment/qa paths.
 Streaming/thumbnail implementation follows the official references:
 [Vercel streaming responses](https://vercel.com/kb/guide/how-to-bypass-vercel-body-size-limit-serverless-functions)
 and [Drive private thumbnail authorization](https://developers.google.com/workspace/drive/api/reference/rest/v3/files).
+
+## Private uploads after consent withdrawal
+
+Withdrawal blocks posting and external sharing while private uploads and downloads
+remain available. Add media stays visible for active withdrawn patients. Each new
+session finishes on hold while withdrawal is active, even if session consent was
+checked. Uploading never clears the withdrawal or restores revoked links. New
+session consent events remain append-only; the existing consent sentence and
+version are unchanged. Archived patients still require restoration before upload.
+
+Run `node --env-file=.env.upload-test scripts/withdrawn-upload-integration.mjs`
+against the isolated localhost test server to exercise mixed uploads after
+withdrawal, resume/retry, consent preservation, social-access denial, and archives.
+No schema migration, additional dependency, or new environment variable is needed.
