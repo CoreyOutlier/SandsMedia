@@ -32,7 +32,7 @@ Implemented across steps 4–7:
   or copy after the link has been prepared.
 - Streaming originals and ZIP downloads, private Open in Drive links, clinic name,
   passcode rotation, allowlist view, and a storage-check control.
-- Nightly Drive reconciliation at 08:00 UTC. It recovers preallocated uploaded files
+- Optional Drive reconciliation (automatic schedule currently off). It recovers preallocated uploaded files
   from existing manifests, reports missing/misplaced files, and never guesses patient
   identity or mutates consent. Vercel authenticates it with CRON_SECRET.
 
@@ -42,11 +42,19 @@ authentication checks and the isolated real-Drive integration suite. Commit
 `b4f4479` is deployed successfully to production (Vercel deployment
 `Fsh9anuTECUzMDk2pp3tSs7RGYBj`). Production checks verified the new Save feedback,
 protected pages, a generated 9 MiB video uploaded in two resumable chunks, playback,
-and an original download matching the upload byte for byte. SHARE_SECRET and
-CRON_SECRET are generated privately but not yet saved in Vercel: the browser
-credential-save approvals remain unanswered. Sharing is visibly disabled until
-configured, and the nightly endpoint fails closed without its secret. These two
-features are implemented and integration-tested but are not yet activated in production.
+and an original download matching the upload byte for byte. The owner approved
+SHARE_SECRET, and it is saved as a production secret in Vercel. On the owner's
+storage question, the nightly schedule was removed from vercel.json pending a
+storage decision; CRON_SECRET has not been saved. The authenticated manual
+Check storage control remains available. The nightly endpoint rejects requests
+without its secret. Media remain in private Shared Drive folders; GitHub holds
+application code only.
+
+The owner's screenshot confirmed the patient-selection validation was reached.
+Save now opens name confirmation directly when a name is typed without selecting
+a patient. Search and new-patient entry are separate states, with clear guidance,
+so editing a name cannot silently cancel new-patient entry. Nothing is uploaded
+until the user reviews the name and submits again.
 
 Verification: a fresh mixed patient upload, name/treatment searches, both libraries,
 private thumbnails, video ranges and invalid ranges, a stream larger than 8 MiB,
@@ -206,7 +214,7 @@ Auth error logs are fixed codes only. Secrets must never use NEXT_PUBLIC_ names.
 | ALLOWED_EMAILS | Comma-separated exact Google email allowlist; empty denies all access. |
 | COOKIE_SECRET | Independent random secret for the upload passcode cookie, also encrypts resumable upload session URLs. |
 | SHARE_SECRET | Independent random secret for signed media/download capabilities and PIN cookies. Required for sharing. |
-| CRON_SECRET | Independent random bearer secret Vercel uses for the nightly storage reconciliation route. |
+| CRON_SECRET | Optional random bearer secret for the storage reconciliation route. No automatic schedule is currently configured. |
 | SYNTHETIC_TEST_MODE | Defaults true; shows a test-only notice and requires acknowledgement. Set false only after the practice confirms the brief’s patient-data setup. |
 | MAX_VIDEO_MB | Video upload cap; default 500. |
 | CONSENT_TEXT_VERSION | Initial value 1; must match the code's consent version. |
