@@ -8,9 +8,9 @@ The temporary test origin is https://sandsmedia-platform.vercel.app.
 The specification is [docs/BRIEF.md](docs/BRIEF.md). The
 [prototype](docs/prototype.html) is reference material, never served or embedded.
 
-## Current checkpoint: upload implementation, deployment pending
+## Current checkpoint: steps 2 and 3, uploads deployed
 
-The owner asked to proceed with the actual upload form. The local build now has
+The owner asked to proceed with the actual upload form. The production release now has
 `/upload` for the five approved Google accounts and `/u/dr-sands` for clinic passcode
 access. It accepts a patient or a titled general upload, multiple photos and videos
 in one batch, treatment/title, date, description, uploader, per-file labels and the
@@ -32,10 +32,16 @@ The production database has both migrations and an initialized clinic. The runti
 login remains restricted, including append-only consent permissions. Drive API is
 enabled in the dedicated SandsMedia Cloud project. Its service account is Content
 manager only in the dedicated Shared Drive; Corey is the other member. The Drive
-credential and root ID have been saved as Production secrets in Vercel.
+credential, root ID and independent upload-cookie secret have been saved as Production
+secrets in Vercel.
 
-The live deployment still serves the earlier foundation until this change is
-published and verified. The Patients and Other uploads library views remain
+Upload release `52b3cf3` deployed successfully to Vercel on 29 October 2026.
+Production access/header checks and a real allowlisted Google sign-in passed; both
+upload forms render with the confirmed production settings. A generated photo and
+video were uploaded together through the production browser form and completed in
+a titled Other uploads folder with separate Photos and Videos folders. This clearly
+labeled verification batch contains no patient information.
+The Patients and Other uploads library views remain
 placeholders for step 4: saved files are available through the success screen's
 Drive link, and patient selection searches existing records. Full library browsing,
 media playback/downloads, share links, consent withdrawal and admin controls remain
