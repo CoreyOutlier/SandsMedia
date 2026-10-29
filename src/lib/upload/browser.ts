@@ -1,5 +1,6 @@
 import imageCompression from "browser-image-compression";
 import type { FilePlan, Label } from "./validation";
+import { UploadRequestError } from "./recovery.ts";
 export type PickedFile={plan:Omit<FilePlan,"label"> & {label:Label|""};file:File;preview:string;progress:number};
 export async function prepareFile(input:File,maxVideoMB:number):Promise<PickedFile> {
   const video=input.type.startsWith("video/");
@@ -33,11 +34,12 @@ export async function prepareFile(input:File,maxVideoMB:number):Promise<PickedFi
 export async function api<T>(path:string,body?:unknown):Promise<T> {
   let response:Response;
   try {response=await fetch(path,{method:body===undefined?"GET":"POST",headers:body===undefined?undefined:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:AbortSignal.timeout(75000)});}
-  catch {throw new Error("Connection lost. Keep this page open and tap Resume upload when you are online.");}
-  let data;try{data=await response.json();}catch{throw new Error("The server took too long to respond. Tap Resume upload; saved files will not be duplicated.");}
+  catch {throw new UploadRequestError("Connection lost. Keep this page open and tap Resume upload when you are online.","NETWORK_ERROR",0);}
+  let data;try{data=await response.json();}catch{throw new UploadRequestError("The server took too long to respond. Tap Resume upload; saved files will not be duplicated.","INVALID_RESPONSE",response.status);}
   if(!response.ok) {
-    const messages:Record<string,string>={UPLOAD_UNAVAILABLE:"The server could not complete this step. Tap Resume upload to retry safely.",FILE_NOT_CONFIRMED:"Drive is still processing this file. Wait a moment, then tap Resume upload.",SIGN_IN_REQUIRED:"Your sign-in expired. Sign in again to continue.",UPLOAD_SETUP_REQUIRED:"Storage is not connected yet. Your files have not been uploaded.",PATIENT_ARCHIVED:"This patient is archived. Restore the patient from the library before adding or resuming uploads.",INVALID_MEDIA_TITLE:"Video titles must be 120 characters or fewer.",UPLOAD_NOT_FOUND:"This upload is unavailable for your account.",UPLOAD_INCOMPLETE:"Some files are not finished. Resume the upload to complete them.",DRIVE_UNAVAILABLE:"Drive could not be reached. Please try again.",PASSCODE_INCORRECT:"That passcode is incorrect.",TOO_MANY_ATTEMPTS:"Too many attempts. Try again in 15 minutes.",FILE_TOO_LARGE:"One of the files exceeds the upload limit.",INVALID_FIELDS:"Please check the information you entered.",REQUIRED_FIELDS:"Please complete the required fields.",CONSENT_FILE_CONFLICT:"The consent record needs review. Contact your portal administrator."};
-    throw new Error(messages[data.error]??"The upload could not be completed. Your confirmed files are safe; try again.");
+    const messages:Record<string,string>={UPLOAD_UNAVAILABLE:"The server could not complete this step. Tap Resume upload to retry safely.",FILE_NOT_CONFIRMED:"Drive is still processing this file. Wait a moment, then tap Resume upload.",SIGN_IN_REQUIRED:"Your sign-in expired. Sign in again to continue.",UPLOAD_SETUP_REQUIRED:"Storage is not connected yet. Your files have not been uploaded.",PATIENT_ARCHIVED:"This patient is archived. Restore the patient from the library before adding or resuming uploads.",INVALID_MEDIA_TITLE:"Video titles must be 120 characters or fewer.",UPLOAD_NOT_FOUND:"This saved upload could not be recovered. It may not have started, or it may belong to a different sign-in.",UPLOAD_INCOMPLETE:"Some files are not finished. Resume the upload to complete them.",DRIVE_UNAVAILABLE:"Drive could not be reached. Please try again.",PASSCODE_INCORRECT:"That passcode is incorrect.",TOO_MANY_ATTEMPTS:"Too many attempts. Try again in 15 minutes.",FILE_TOO_LARGE:"One of the files exceeds the upload limit.",INVALID_FIELDS:"Please check the information you entered.",REQUIRED_FIELDS:"Please complete the required fields.",CONSENT_FILE_CONFLICT:"The consent record needs review. Contact your portal administrator."};
+    const code=typeof data?.error==="string"&&/^[A-Z_]{1,80}$/.test(data.error)?data.error:"UNKNOWN";
+    throw new UploadRequestError(messages[code]??"The upload could not be completed. Your confirmed files are safe; try again.",code,response.status);
   }
   return data;
 }

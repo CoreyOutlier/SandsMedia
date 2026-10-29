@@ -408,3 +408,21 @@ Run `node --env-file=.env.upload-test scripts/withdrawn-upload-integration.mjs`
 against the isolated localhost test server to exercise mixed uploads after
 withdrawal, resume/retry, consent preservation, social-access denial, and archives.
 No schema migration, additional dependency, or new environment variable is needed.
+
+## Upload recovery
+
+A rejected first start validation unlocks the existing draft and removes its stale
+resume hint without discarding selected files. Network failures and ambiguous
+responses retain the same upload UUID for idempotent retries. If an old hint cannot
+be recovered, the upload screen offers Try resume again, Check saved files, and
+Start a new upload. It never automatically creates a replacement or changes batch
+ownership. Only the original authenticated uploader can resume that batch.
+
+Browser session storage contains only the pending UUID, never patient details.
+Restoring an upload retains matching selections, applies the saved labels/titles,
+and discards unrelated previews. Completed batches show Finish saving.
+
+Run `node --env-file=.env.upload-test scripts/resume-integration.mjs` against the
+local test server for rejected starts, missing hints, original-uploader recovery,
+strict ownership, concurrent retries, and lost-response recovery without duplicate
+patients or sessions. No schema, dependency, or environment change is required.
