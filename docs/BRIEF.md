@@ -276,3 +276,13 @@ Both patient and Other uploads accept videos up to 5 GB (5,120 × 1,024² bytes)
 and 2 hours each. This supersedes the original 500 MB / 3-minute limits. Videos
 remain unchanged and transfer directly to private Drive storage in resumable
 8 MiB chunks. Photos retain their 2048 px JPEG conversion.
+
+## Owner addition — 29 October 2026: patient collections
+
+Staff can independently star patients as Favorites and mark patients as Celebrities.
+These markers are shared across the clinic team and default off. Add one Collection
+filter with All patients, Favorites and Celebrities, composed with existing search,
+consent, media and archive filters. Celebrity records receive a restrained gold
+badge and accent in the private directory and detail view. Keep social clearance
+visible and unchanged. Neither marker grants permission to post or share, and
+neither appears in public shares. Other uploads remains a separate general library.

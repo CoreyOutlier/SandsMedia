@@ -2,9 +2,10 @@ export type MediaItem = { id: string; kind: string; label: string; title: string
 export type Visit = { id: string; date: string; title: string; description?: string; uploadedBy?: string; status?: string; finished?: boolean; consented?: boolean; formOnFile?: boolean; quote?: string | null; driveUrl?: string | null; photosDriveUrl?: string | null; videosDriveUrl?: string | null; media: MediaItem[] };
 export type ShareItem = { id: string; createdAt: string; expiresAt: string; revokedAt: string | null; viewCount: number; lastViewedAt: string | null; pinProtected: boolean; views: { id: string; createdAt: string }[] };
 export type ConsentHistoryItem = { id: string; action: string; createdAt: string; actor: string };
-export type Detail = { id: string; name: string; displayId: string; clearance?: { status: string; missing: number }; archivedAt: string | null; consentHistory: ConsentHistoryItem[]; driveUrl: string | null; download: string; sessions: Visit[]; links: ShareItem[]; postedSessions: { id: string; title: string; date: string }[] };
-export type Row = { id: string; name: string; displayId: string; date: string; photos: number; videos: number; status: string; posted?: number; incomplete: boolean; archived: boolean };
+export type Detail = { id: string; name: string; displayId: string; isFavorite: boolean; isCelebrity: boolean; clearance?: { status: string; missing: number }; archivedAt: string | null; consentHistory: ConsentHistoryItem[]; driveUrl: string | null; download: string; sessions: Visit[]; links: ShareItem[]; postedSessions: { id: string; title: string; date: string }[] };
+export type Row = { id: string; name: string; displayId: string; isFavorite: boolean; isCelebrity: boolean; date: string; photos: number; videos: number; status: string; posted?: number; incomplete: boolean; archived: boolean };
 export type ArchiveFilter = "active" | "archived" | "all";
+export type CollectionFilter = "all" | "favorites" | "celebrities";
 export class PortalRequestError extends Error { retryable: boolean; constructor(message: string, retryable = false) { super(message); this.retryable = retryable; } }
 export async function portalApi<T>(path: string, body?: unknown, timeoutMs = 45000): Promise<T> {
  let response: Response;

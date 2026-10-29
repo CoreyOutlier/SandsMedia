@@ -53,6 +53,9 @@ model Patient {
   consentWithdrawnAt DateTime?   @map("consent_withdrawn_at") @db.Timestamptz(3)
   lifecycleVersion   Int         @default(0) @map("lifecycle_version")
   archivedAt         DateTime?   @map("archived_at") @db.Timestamptz(3)
+  // Shared internal library markers; neither grants social clearance.
+  isFavorite         Boolean     @default(false) @map("is_favorite")
+  isCelebrity        Boolean     @default(false) @map("is_celebrity")
   createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   clinic             Clinic      @relation(fields: [clinicId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   sessions           Session[]
@@ -61,6 +64,8 @@ model Patient {
 
   // Clearance is derived, never a mutable column.
   @@index([clinicId, archivedAt])
+  @@index([clinicId, isFavorite, archivedAt])
+  @@index([clinicId, isCelebrity, archivedAt])
   @@unique([clinicId, displayId])
   @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin)

@@ -8,6 +8,45 @@ The temporary test origin is https://sandsmedia-platform.vercel.app.
 The specification is [docs/BRIEF.md](docs/BRIEF.md). The
 [prototype](docs/prototype.html) is reference material, never served or embedded.
 
+## Favorites and celebrities — 29 October 2026
+
+Patient records have independent Favorite and Celebrity markers shared across the
+clinic team. Star a patient from the directory or use the Favorite / Celebrity
+controls in their record. The Collection dropdown selects All patients, Favorites
+or Celebrities and combines with search, consent, media and archive filters.
+Celebrity records receive an owner-requested gold badge and accent; consent status
+stays visible and continues to control posting and sharing. Markers are internal
+only and are omitted from public share data. Other uploads has no patient markers.
+
+Both flags default to false for existing patients. The additive migration is
+`prisma/migrations/202610290004_patient_collections/migration.sql`; it adds only
+two non-null booleans and clinic-scoped indexes. Authenticated dashboard users can
+set either flag to an explicit boolean. Clinic upload-passcode access cannot do
+so. Assignments are retry-safe and do not change files, consent, lifecycle history
+or existing links. No new dependencies or environment variables are required.
+
+Apply with the separate database owner connection, never the runtime login:
+`node --env-file=.env.upload-test-admin scripts/patient-collections-migrate.mjs test`
+for the isolated test database. The runner's production mode additionally requires
+the production clinic/Drive configuration and checks database identity, record
+counts, defaults, runtime privileges and immutable audit protections before and
+after migration. Run `scripts/patient-flags-integration.mjs` with
+`.env.upload-test` against the local production build on port 3102; it refuses
+other databases and origins and uses only synthetic records, without Drive calls.
+
+The migration has been applied to both test and production, with aggregate record
+counts preserved and consent/history protections verified. All 54 unit tests, the
+production build, HTTP smoke checks and authenticated route checks passed. The
+isolated integration verified independent flags, repeated/concurrent assignments,
+strict validation, clinic and login boundaries, composed filters, 53-record
+pagination and public-share exclusion. Existing consent, media and link records
+remained unchanged. A late detail/list response cannot overwrite a saved marker.
+Desktop and 390 px browser checks confirmed saved toggles after reload, removal
+from Favorites without losing the open record, the gold Celebrity treatment,
+working collection filters, 44 px controls, visible focus and no horizontal
+overflow. Other uploads has no collection controls. Browser checks used synthetic
+patient records only.
+
 ## Larger and longer video uploads — 29 October 2026
 
 The owner selected **5 GB per video and up to two hours**, for both patient and

@@ -4,6 +4,7 @@ import { clearance } from "@/lib/clearance";
 import { patientInclude } from "./library";
 import { portalIdentity,requestIdentity } from "./access";
 import { canCompleteRenewal } from "./lifecycle-policy";
+import { patientFlagUpdate } from "./patient-flags";
 import { appendConsentMirrors,writeConsentFile } from "@/lib/upload/drive";
 import { UploadError,uuid } from "@/lib/upload/validation";
 type Identity=Awaited<ReturnType<typeof portalIdentity>>;
@@ -15,7 +16,9 @@ export async function patientAction(id:string,identity:Identity,body:Record<stri
   const p=await tx.patient.findFirst({where:{id,clinicId:identity.clinic.id}});
   if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);
   let action:string|null=null;
-  if(body.action==="withdraw"){
+  if(body.action==="favorite"||body.action==="celebrity"){
+   await tx.patient.update({where:{id},data:patientFlagUpdate(body.action,body.value)});
+  }else if(body.action==="withdraw"){
    const pending=await tx.patientActivity.findFirst({where:{patientId:id,action:"renewal_recorded",patientVersion:p.lifecycleVersion}});
    if(!p.consentWithdrawnAt||pending){await tx.patient.update({where:{id},data:{consentWithdrawnAt:p.consentWithdrawnAt??new Date(),lifecycleVersion:{increment:1}}});action="consent_withdrawn";}
    await tx.shareLink.updateMany({where:{patientId:id,revokedAt:null},data:{revokedAt:new Date()}});

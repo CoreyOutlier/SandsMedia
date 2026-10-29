@@ -2,6 +2,7 @@ import { database } from "@/lib/db";
 import { clearance } from "@/lib/clearance";
 import { Prisma } from "@/generated/prisma/client";
 import { UploadError, textField, uuid } from "@/lib/upload/validation";
+import { patientCollection } from "./patient-flags";
 const folderUrl=(id:string|null|undefined)=>id?`https://drive.google.com/drive/folders/${id}`:null;
 export const patientInclude = { sessions: { orderBy: [{date:"desc"},{createdAt:"desc"}], include: { uploadBatch: { select: { photosFolderId: true, videosFolderId: true } }, media: { orderBy: {position:"asc"} }, consentEvents: { select: {consented:true,formOnFile:true,createdAt:true,consentTextVersion:true} } } } } satisfies Prisma.PatientInclude;
 export function mediaDto(m: {id:string;kind:string;fileName:string;bytes:bigint;width:number|null;height:number|null;durationS:number|null;position:number;label?:string;title?:string|null}, general=false, ticket?:string) {
@@ -16,28 +17,29 @@ export async function patientDetail(id:string,clinicId:string) {
   const status=clearance(p);
   const consentHistory=await database().patientActivity.findMany({where:{patientId:id},orderBy:{createdAt:"desc"},take:50,select:{id:true,action:true,actor:true,createdAt:true}});
   const links=await database().shareLink.findMany({where:{patientId:id},orderBy:{createdAt:"desc"},take:50,select:{id:true,createdAt:true,expiresAt:true,revokedAt:true,viewCount:true,lastViewedAt:true,pinHash:true,views:{take:10,orderBy:{createdAt:"desc"},select:{id:true,createdAt:true}}}});
-  return {id:p.id,name:`${p.firstName} ${p.lastName}`,displayId:p.displayId,archivedAt:p.archivedAt,consentHistory,clearance:status,driveUrl:p.driveFolderId?`https://drive.google.com/drive/folders/${p.driveFolderId}`:null,download:`/api/download/patient/${p.id}`,sessions:p.sessions.map(s=>({id:s.id,date:s.date.toISOString().slice(0,10),title:s.treatment,driveUrl:folderUrl(s.driveFolderId),photosDriveUrl:folderUrl(s.uploadBatch?.photosFolderId),videosDriveUrl:folderUrl(s.uploadBatch?.videosFolderId),description:s.description,uploadedBy:s.uploadedBy,status:s.status,finished:!!s.finishedAt,consented:s.consentEvents.some(e=>e.consented),formOnFile:s.consentEvents.some(e=>e.consented&&e.formOnFile),quote:s.testimonialQuote,media:s.media.map(m=>mediaDto(m))})),links:links.map(({pinHash,views,...l})=>({...l,pinProtected:!!pinHash,views})),postedSessions:p.sessions.filter(s=>s.status==="posted").map(s=>({id:s.id,title:s.treatment,date:s.date.toISOString().slice(0,10)}))};
+  return {id:p.id,name:`${p.firstName} ${p.lastName}`,displayId:p.displayId,archivedAt:p.archivedAt,isFavorite:p.isFavorite,isCelebrity:p.isCelebrity,consentHistory,clearance:status,driveUrl:p.driveFolderId?`https://drive.google.com/drive/folders/${p.driveFolderId}`:null,download:`/api/download/patient/${p.id}`,sessions:p.sessions.map(s=>({id:s.id,date:s.date.toISOString().slice(0,10),title:s.treatment,driveUrl:folderUrl(s.driveFolderId),photosDriveUrl:folderUrl(s.uploadBatch?.photosFolderId),videosDriveUrl:folderUrl(s.uploadBatch?.videosFolderId),description:s.description,uploadedBy:s.uploadedBy,status:s.status,finished:!!s.finishedAt,consented:s.consentEvents.some(e=>e.consented),formOnFile:s.consentEvents.some(e=>e.consented&&e.formOnFile),quote:s.testimonialQuote,media:s.media.map(m=>mediaDto(m))})),links:links.map(({pinHash,views,...l})=>({...l,pinProtected:!!pinHash,views})),postedSessions:p.sessions.filter(s=>s.status==="posted").map(s=>({id:s.id,title:s.treatment,date:s.date.toISOString().slice(0,10)}))};
 }
 export async function generalDetail(id:string,clinicId:string) {
   if(!uuid(id))throw new UploadError("UPLOAD_NOT_FOUND",404);
   const u=await database().generalUpload.findFirst({where:{id,clinicId},include:{uploadBatch:{select:{photosFolderId:true,videosFolderId:true}},media:{orderBy:{position:"asc"}}}});
   if(!u)throw new UploadError("UPLOAD_NOT_FOUND",404);
-  return {id:u.id,name:u.title,displayId:"Other uploads",archivedAt:null,consentHistory:[],driveUrl:u.driveFolderId?`https://drive.google.com/drive/folders/${u.driveFolderId}`:null,download:`/api/download/general/${u.id}`,sessions:[{id:u.id,date:u.date.toISOString().slice(0,10),title:u.title,driveUrl:folderUrl(u.driveFolderId),photosDriveUrl:folderUrl(u.uploadBatch?.photosFolderId),videosDriveUrl:folderUrl(u.uploadBatch?.videosFolderId),description:u.description,uploadedBy:u.uploadedBy,status:"private",finished:!!u.finishedAt,consented:false,media:u.media.map(m=>mediaDto(m,true))}],links:[],postedSessions:[]};
+  return {id:u.id,name:u.title,displayId:"Other uploads",archivedAt:null,isFavorite:false,isCelebrity:false,consentHistory:[],driveUrl:u.driveFolderId?`https://drive.google.com/drive/folders/${u.driveFolderId}`:null,download:`/api/download/general/${u.id}`,sessions:[{id:u.id,date:u.date.toISOString().slice(0,10),title:u.title,driveUrl:folderUrl(u.driveFolderId),photosDriveUrl:folderUrl(u.uploadBatch?.photosFolderId),videosDriveUrl:folderUrl(u.uploadBatch?.videosFolderId),description:u.description,uploadedBy:u.uploadedBy,status:"private",finished:!!u.finishedAt,consented:false,media:u.media.map(m=>mediaDto(m,true))}],links:[],postedSessions:[]};
 }
 export async function listLibrary(body:Record<string,unknown>,clinicId:string) {
   const q=textField(body.q??"",120,false);const kind=["photo","video"].includes(String(body.media))?String(body.media):"all";
   const archive=["active","archived","all"].includes(String(body.archive))?String(body.archive):"active";
   const filter=String(body.filter??"all");const general=body.general===true;
+  const collection=patientCollection(body.collection,general);
   const offset=Number(body.offset??0);if(!Number.isSafeInteger(offset)||offset<0||offset>100000)throw new UploadError("INVALID_FIELDS");
   const pattern=(v:string)=>`%${v.replace(/[\\%_]/g,"\\$&")}%`;
-  type Result={id:string;name:string;display_id:string;date:Date;photos:bigint;videos:bigint;status:string;posted:bigint;incomplete:boolean;archived:boolean};
+  type Result={id:string;name:string;display_id:string;date:Date;photos:bigint;videos:bigint;status:string;posted:bigint;incomplete:boolean;archived:boolean;is_favorite:boolean;is_celebrity:boolean};
   let rows:Result[];
   if(general){const match=q.length>=2?Prisma.sql`AND (u.title ILIKE ${pattern(q)} OR u.description ILIKE ${pattern(q)} OR EXISTS(SELECT 1 FROM general_media m WHERE m.general_upload_id=u.id AND m.title ILIKE ${pattern(q)}))`:Prisma.empty;
     rows=await database().$queryRaw<Result[]>(Prisma.sql`
       SELECT u.id,u.title AS name,'Other uploads' AS display_id,u.date,
       (SELECT count(*) FROM general_media m WHERE m.general_upload_id=u.id AND m.kind='photo') AS photos,
       (SELECT count(*) FROM general_media m WHERE m.general_upload_id=u.id AND m.kind='video') AS videos,
-      'private' AS status,0::bigint AS posted,u.finished_at IS NULL AS incomplete,false AS archived
+      'private' AS status,0::bigint AS posted,u.finished_at IS NULL AS incomplete,false AS archived,false AS is_favorite,false AS is_celebrity
       FROM general_uploads u WHERE u.clinic_id=${clinicId}::uuid ${match}
       AND (${kind}='all' OR EXISTS(SELECT 1 FROM general_media m WHERE m.general_upload_id=u.id AND m.kind::text=${kind}))
       ORDER BY u.date DESC,u.created_at DESC,u.id LIMIT 51 OFFSET ${offset}`);
@@ -52,15 +54,16 @@ export async function listLibrary(body:Record<string,unknown>,clinicId:string) {
         (SELECT count(*) FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.kind='video') AS videos,
         (SELECT count(*) FROM sessions s WHERE s.patient_id=p.id AND s.status='posted') AS posted,
         EXISTS(SELECT 1 FROM sessions s WHERE s.patient_id=p.id AND s.finished_at IS NULL) AS incomplete,
-        p.archived_at IS NOT NULL AS archived,
+        p.archived_at IS NOT NULL AS archived,p.is_favorite,p.is_celebrity,
         CASE WHEN p.archived_at IS NOT NULL THEN 'archived' WHEN p.consent_withdrawn_at IS NOT NULL THEN 'withdrawn'
         WHEN NOT EXISTS(SELECT 1 FROM sessions s WHERE s.patient_id=p.id) OR EXISTS(SELECT 1 FROM sessions s WHERE s.patient_id=p.id AND (s.finished_at IS NULL OR NOT EXISTS(SELECT 1 FROM consent_events c WHERE c.session_id=s.id AND c.consented))) THEN 'hold' ELSE 'cleared' END AS status
         FROM patients p WHERE p.clinic_id=${clinicId}::uuid ${match}
+        AND (${collection}='all' OR (${collection}='favorites' AND p.is_favorite) OR (${collection}='celebrities' AND p.is_celebrity))
         AND (${archive}='all' OR (${archive}='active' AND p.archived_at IS NULL) OR (${archive}='archived' AND p.archived_at IS NOT NULL))
       ) SELECT * FROM candidates WHERE
       (${kind}='all' OR (${kind}='photo' AND photos>0) OR (${kind}='video' AND videos>0)) AND
       (${filter}='all' OR (${filter}='cleared' AND status='cleared') OR (${filter}='hold' AND status<>'cleared') OR (${filter}='posted' AND status='cleared' AND posted>0))
       ORDER BY date DESC,id LIMIT 51 OFFSET ${offset}`);
   }
-  return {more:rows.length>50,rows:rows.slice(0,50).map(r=>({id:r.id,name:r.name,displayId:r.display_id,date:r.date.toISOString(),photos:Number(r.photos),videos:Number(r.videos),status:r.status,archived:r.archived,posted:Number(r.posted),incomplete:r.incomplete}))};
+  return {more:rows.length>50,rows:rows.slice(0,50).map(r=>({id:r.id,name:r.name,displayId:r.display_id,date:r.date.toISOString(),photos:Number(r.photos),videos:Number(r.videos),status:r.status,archived:r.archived,isFavorite:r.is_favorite,isCelebrity:r.is_celebrity,posted:Number(r.posted),incomplete:r.incomplete}))};
 }

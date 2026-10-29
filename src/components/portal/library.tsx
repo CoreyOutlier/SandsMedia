@@ -3,18 +3,21 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from "@/lib/consent";
 import { MediaGallery } from "./media-gallery";
-import { portalApi, withdrawPatient, renewPatientConsent, displayDate, type ArchiveFilter, type Row, type Detail } from "./types";
+import { portalApi, withdrawPatient, renewPatientConsent, displayDate, type ArchiveFilter, type CollectionFilter, type Row, type Detail } from "./types";
 
 const statusText = (status: string) => ({ cleared: "Cleared for social", hold: "Not cleared", withdrawn: "Consent withdrawn", private: "Private footage", archived: "Archived" }[status] ?? status);
 const historyText = (action: string) => ({ consent_withdrawn: "Consent withdrawn", renewal_recorded: "Renewal record created", consent_renewed: "Written consent renewed", archived: "Patient archived", restored: "Patient restored" }[action] ?? "Consent record added");
 function SearchIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>; }
 function FolderIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z" /></svg>; }
+function StarIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1 6.2-5.6-3-5.6 3 1-6.2-4.5-4.4 6.3-.9Z" /></svg>; }
+function CelebrityIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7Z" /></svg>; }
 
 export function Library({ general = false, initialId = "" }: { general?: boolean; initialId?: string }) {
  const [q, setQ] = useState("");
  const [filter, setFilter] = useState("all");
  const [media, setMedia] = useState("all");
  const [archive, setArchive] = useState<ArchiveFilter>("active");
+ const [collection, setCollection] = useState<CollectionFilter>("all");
  const [rows, setRows] = useState<Row[]>([]);
  const [more, setMore] = useState(false);
  const [selected, setSelected] = useState(initialId);
@@ -25,6 +28,7 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
  const [error, setError] = useState("");
  const [notice, setNotice] = useState("");
  const [version, setVersion] = useState(0);
+ const [listVersion, setListVersion] = useState(0);
  const searchGeneration = useRef(0);
  const detailGeneration = useRef(0);
  const directoryScroll = useRef(0);
@@ -34,6 +38,7 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
  const [shareUrl, setShareUrl] = useState("");
  const [shareError, setShareError] = useState("");
  const [busyAction, setBusyAction] = useState("");
+ const [collectionFeedback, setCollectionFeedback] = useState<{ source: "directory" | "detail"; error: boolean; message: string } | null>(null);
  const mutating = !!busyAction;
  const [consentMode, setConsentMode] = useState<"withdraw" | "renew" | null>(null);
  const [consentConfirm, setConsentConfirm] = useState(false);
@@ -52,29 +57,39 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
   const generation = ++searchGeneration.current;
   const timer = setTimeout(() => {
    setLoading(true);
-   portalApi<{ rows: Row[]; more: boolean }>("/api/library", { q, filter, media, general, archive }).then(r => {
+   portalApi<{ rows: Row[]; more: boolean }>("/api/library", { q, filter, media, general, archive, collection }).then(r => {
     if (generation !== searchGeneration.current) return;
     setRows(r.rows); setMore(r.more); setSelected(old => old || r.rows[0]?.id || ""); setError("");
    }).catch(e => { if (generation === searchGeneration.current) setError(e.message); }).finally(() => { if (generation === searchGeneration.current) setLoading(false); });
   }, q.length ? 150 : 0);
   return () => clearTimeout(timer);
- }, [q, filter, media, general, archive, version]);
+ }, [q, filter, media, general, archive, collection, version, listVersion]);
  useEffect(() => {
   const generation = ++detailGeneration.current;
-  setShareOpen(false); setShareUrl(""); setShareError(""); setConsentMode(null); setConsentConfirm(false); setConsentError(""); setConsentNotice(""); setArchiveOpen(false); setArchiveError(""); setArchiveNotice(""); setDetail(null); renewalRequest.current = "";
+  setShareOpen(false); setShareUrl(""); setShareError(""); setConsentMode(null); setConsentConfirm(false); setConsentError(""); setConsentNotice(""); setArchiveOpen(false); setArchiveError(""); setArchiveNotice(""); setCollectionFeedback(old => old?.source === "detail" ? null : old); setDetail(null); renewalRequest.current = "";
   if (!selected) return;
   portalApi<Detail>(`/api/${general ? "general" : "patients"}/${selected}`).then(r => { if (generation === detailGeneration.current) setDetail(r); }).catch(e => { if (generation === detailGeneration.current) setError(e.message); });
  }, [selected, general, version]);
  const refresh = () => setVersion(v => v + 1);
  const updateDetail = (updated: Detail) => {
-  setDetail(updated);
-  setRows(old => old.map(row => row.id === updated.id ? { ...row, archived: !!updated.archivedAt, status: updated.clearance?.status ?? row.status, posted: updated.sessions.filter(s => s.status === "posted").length } : row).filter(row => (general || archive === "all" || (archive === "archived" ? row.archived : !row.archived)) && (general || filter === "all" || (filter === "cleared" && row.status === "cleared") || (filter === "hold" && row.status !== "cleared") || (filter === "posted" && row.status === "cleared" && (row.posted ?? 0) > 0))));
+  if (updated.id === selected) { ++detailGeneration.current; setDetail(updated); }
+  setRows(old => old.map(row => row.id === updated.id ? { ...row, isFavorite: updated.isFavorite, isCelebrity: updated.isCelebrity, archived: !!updated.archivedAt, status: updated.clearance?.status ?? row.status, posted: updated.sessions.filter(s => s.status === "posted").length } : row).filter(row => (general || collection === "all" || (collection === "favorites" ? row.isFavorite : row.isCelebrity)) && (general || archive === "all" || (archive === "archived" ? row.archived : !row.archived)) && (general || filter === "all" || (filter === "cleared" && row.status === "cleared") || (filter === "hold" && row.status !== "cleared") || (filter === "posted" && row.status === "cleared" && (row.posted ?? 0) > 0))));
  };
+ async function changeCollectionFlag(id: string, action: "favorite" | "celebrity", value: boolean, source: "directory" | "detail") {
+  if (general || mutating) return;
+  setBusyAction(`${action}-${id}`); setCollectionFeedback({ source, error: false, message: action === "favorite" ? "Saving favorite…" : "Saving celebrity label…" });
+  try {
+   const updated = await portalApi<Detail>(`/api/patients/${id}`, { action, value });
+   ++searchGeneration.current; setLoading(false);
+   updateDetail(updated); setListVersion(v => v + 1);
+   setCollectionFeedback({ source, error: false, message: action === "favorite" ? value ? "Added to team favorites." : "Removed from team favorites." : value ? "Celebrity label saved." : "Celebrity label removed." });
+  } catch (e) { setCollectionFeedback({ source, error: true, message: (e as Error).message }); } finally { setBusyAction(""); }
+ }
  async function loadMore() {
   if (loadingMore) return;
   setLoadingMore(true);
   const generation = searchGeneration.current;
-  try { const r = await portalApi<{ rows: Row[]; more: boolean }>("/api/library", { q, filter, media, general, archive, offset: rows.length }); if (generation !== searchGeneration.current) return; setRows(old => [...old, ...r.rows]); setMore(r.more); }
+  try { const r = await portalApi<{ rows: Row[]; more: boolean }>("/api/library", { q, filter, media, general, archive, collection, offset: rows.length }); if (generation !== searchGeneration.current) return; setRows(old => [...old, ...r.rows]); setMore(r.more); }
   catch (e) { setError((e as Error).message); } finally { setLoadingMore(false); }
  }
  async function changeStatus(sessionId: string, status: string) {
@@ -139,17 +154,22 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
 
  return <section className={`portal-library library-refined ${showDetail ? "show-detail" : ""}`}>
   <header className="library-topbar"><div><p className="eyebrow">Posting Center / Private library</p><h1>{general ? "Other uploads" : "Patients"}</h1><p className="library-intro">{general ? "Every idea, take, and behind-the-scenes moment." : "Photos, videos, and consent. All in one place."}</p></div><Link className="button primary" href={general ? "/upload?type=general" : "/upload"}>＋ New upload</Link></header>
-  <div className={`library-toolbar ${general ? "general-toolbar" : ""}`}>
+  <div className={`library-toolbar ${general ? "general-toolbar" : "patient-toolbar"}`}>
    <label className="library-search-field"><span className="sr-only">{general ? "Search title or notes" : "Search name, ID or treatment"}</span><SearchIcon /><input id="library-search" type="search" disabled={mutating} autoComplete="off" value={q} onChange={e => setQ(e.target.value)} placeholder={general ? "Search title or notes" : "Search name, ID or treatment"} /></label>
+   {!general && <label className="library-select collection-select"><span>Collection</span><select disabled={mutating} aria-label="Filter by collection" value={collection} onChange={e => { setCollection(e.target.value as CollectionFilter); setSelected(""); setCollectionFeedback(null); }}><option value="all">All patients</option><option value="favorites">Favorites</option><option value="celebrities">Celebrities</option></select></label>}
    {!general && <label className="library-select"><span>Consent</span><select disabled={mutating} aria-label="Filter by consent" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">Any status</option><option value="cleared">Cleared for social</option><option value="hold">Not cleared</option><option value="posted">Posted</option></select></label>}
    <label className="library-select"><span>Show</span><select disabled={mutating} aria-label="Filter by media type" value={media} onChange={e => setMedia(e.target.value)}><option value="all">All media</option><option value="photo">Photos only</option><option value="video">Videos only</option></select></label>
    {!general && <label className="library-select"><span>Library</span><select disabled={mutating} aria-label="Filter by archive status" value={archive} onChange={e => { setArchive(e.target.value as ArchiveFilter); setSelected(""); }}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All patients</option></select></label>}
   </div>
   <aside className="directory" aria-label={general ? "Upload directory" : "Patient directory"}>
    {error && <p className="upload-error directory-error" role="alert">{error}<button className="button quiet" onClick={refresh}>Try again</button></p>}
-   <div className="search-summary" aria-live="polite"><span>{loading && rows.length === 0 ? "Opening library…" : `${rows.length}${more ? "+" : ""} ${general ? (rows.length === 1 && !more ? "upload" : "uploads") : (rows.length === 1 && !more ? "patient" : "patients")}`}</span>{q.length === 1 ? <span>Type one more character</span> : (q || filter !== "all" || media !== "all" || archive !== "active") && <button disabled={mutating} onClick={() => { setQ(""); setFilter("all"); setMedia("all"); setArchive("active"); setSelected(""); }}>Reset filters</button>}</div>
-   <ul className="patient-list">{rows.map(r => <li key={r.id}><button disabled={mutating} className={selected === r.id ? "selected" : ""} aria-current={selected === r.id ? "true" : undefined} onClick={() => { directoryScroll.current = window.scrollY; setSelected(r.id); setShowDetail(true); setError(""); setNotice(""); if (window.matchMedia("(max-width:879px)").matches) requestAnimationFrame(() => window.scrollTo({ top: 0 })); }}><span className="patient-avatar" aria-hidden="true">{r.name.split(" ").map(x => x[0]).slice(0, 2).join("")}</span><span className="patient-row-main"><strong>{r.name}</strong><small>{r.displayId} · {r.photos} {r.photos === 1 ? "photo" : "photos"} · {r.videos} {r.videos === 1 ? "video" : "videos"}</small><span className={`clearance-badge ${r.archived ? "archived" : r.status}`}>{r.archived ? "Archived" : statusText(r.status)}</span>{r.incomplete && <small>Upload unfinished</small>}</span><span className="patient-row-arrow" aria-hidden="true">›</span></button></li>)}</ul>
-   {!loading && !rows.length && <div className="directory-empty"><strong>{archive === "archived" ? "No archived patients" : q || filter !== "all" || media !== "all" ? "No matches" : "Your library is ready"}</strong><p>{archive === "archived" ? "Archived patients stay safely stored here until you restore them." : q || filter !== "all" || media !== "all" ? "Try a shorter search or adjust a filter." : "Save your first upload to see it here."}</p></div>}
+   <div className="search-summary" aria-live="polite"><span>{loading && rows.length === 0 ? "Opening library…" : `${rows.length}${more ? "+" : ""} ${general ? (rows.length === 1 && !more ? "upload" : "uploads") : (rows.length === 1 && !more ? "patient" : "patients")}`}</span>{q.length === 1 ? <span>Type one more character</span> : (q || filter !== "all" || media !== "all" || archive !== "active" || collection !== "all") && <button disabled={mutating} onClick={() => { setQ(""); setFilter("all"); setMedia("all"); setArchive("active"); setCollection("all"); setSelected(""); setCollectionFeedback(null); }}>Reset filters</button>}</div>
+   {collectionFeedback?.source === "directory" && <p className={`collection-feedback ${collectionFeedback.error ? "error" : ""}`} role={collectionFeedback.error ? "alert" : "status"}>{collectionFeedback.message}</p>}
+   <ul className="patient-list">{rows.map(r => <li key={r.id} className={`${general ? "" : "patient-row"} ${selected === r.id ? "selected" : ""} ${!general && r.isCelebrity ? "is-celebrity" : ""}`}>
+    <button disabled={mutating} className={`patient-row-open ${selected === r.id ? "selected" : ""}`} aria-current={selected === r.id ? "true" : undefined} onClick={() => { directoryScroll.current = window.scrollY; setSelected(r.id); setShowDetail(true); setError(""); setNotice(""); if (window.matchMedia("(max-width:879px)").matches) requestAnimationFrame(() => window.scrollTo({ top: 0 })); }}><span className="patient-avatar" aria-hidden="true">{r.name.split(" ").map(x => x[0]).slice(0, 2).join("")}</span><span className="patient-row-main"><strong>{r.name}</strong>{!general && r.isCelebrity && <span className="celebrity-badge"><CelebrityIcon />Celebrity</span>}<small>{r.displayId} · {r.photos} {r.photos === 1 ? "photo" : "photos"} · {r.videos} {r.videos === 1 ? "video" : "videos"}</small><span className={`clearance-badge ${r.archived ? "archived" : r.status}`}>{r.archived ? "Archived" : statusText(r.status)}</span>{r.incomplete && <small>Upload unfinished</small>}</span>{general && <span className="patient-row-arrow" aria-hidden="true">›</span>}</button>
+    {!general && <button className="patient-star-button" disabled={mutating} aria-label={`Favorite ${r.name}`} aria-pressed={!!r.isFavorite} aria-busy={busyAction === `favorite-${r.id}`} title={r.isFavorite ? "Remove from team favorites" : "Add to team favorites"} onClick={() => changeCollectionFlag(r.id, "favorite", !r.isFavorite, "directory")}>{busyAction === `favorite-${r.id}` ? <span className="collection-saving" aria-hidden="true">…</span> : <StarIcon />}</button>}
+   </li>)}</ul>
+   {!loading && !rows.length && <div className="directory-empty"><strong>{q || filter !== "all" || media !== "all" ? "No matches" : collection === "favorites" ? "No favorites here yet" : collection === "celebrities" ? "No celebrities here yet" : archive === "archived" ? "No archived patients" : "Your library is ready"}</strong><p>{q || filter !== "all" || media !== "all" ? "Try a shorter search or adjust a filter." : collection === "favorites" ? "Star a patient to add them to your team’s favorites. Try All patients to find them." : collection === "celebrities" ? "Use the Celebrity control in a patient record to add them to this collection." : archive === "archived" ? "Archived patients stay safely stored here until you restore them." : "Save your first upload to see it here."}</p></div>}
    {more && <button className="button load-more" disabled={loadingMore} onClick={loadMore}>{loadingMore ? "Loading…" : "Load more"}</button>}
    <p className="directory-footnote">Private files. Access limited to your team.</p>
   </aside>
@@ -158,7 +178,8 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
    {error && <p className="upload-error" role="alert">{error} <button className="button quiet" onClick={refresh}>Try again</button></p>}
    {notice && <p className="portal-notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></p>}
    {!detail ? <div className="detail-empty"><span className="detail-empty-mark" aria-hidden="true"><FolderIcon /></span><h2>{selected ? "Opening your library…" : general ? "Every clip, in its place." : "Every smile, in one place."}</h2><p>{selected ? "Loading your private photos and videos." : "Choose an item to see its photos, videos, and details."}</p></div> : <>
-    <header className="patient-heading"><div><p className="patient-record-id">{detail.displayId}{archived ? " / Archived patient" : general ? " / Private footage" : " / Patient record"}</p><h1>{detail.name}</h1></div></header>
+    <header className={`patient-heading ${!general && detail.isCelebrity ? "is-celebrity" : ""}`}><div><p className="patient-record-id">{detail.displayId}{archived ? " / Archived patient" : general ? " / Private footage" : " / Patient record"}</p><h1>{detail.name}</h1>{!general && detail.isCelebrity && <span className="celebrity-badge"><CelebrityIcon />Celebrity</span>}</div></header>
+    {!general && <div className="patient-collections"><div className="patient-collection-controls" role="group" aria-label="Patient collections"><button className="button collection-toggle favorite-toggle" disabled={mutating} aria-pressed={!!detail.isFavorite} aria-busy={busyAction === `favorite-${detail.id}`} onClick={() => changeCollectionFlag(detail.id, "favorite", !detail.isFavorite, "detail")}><StarIcon />{busyAction === `favorite-${detail.id}` ? "Saving…" : "Favorite"}</button><button className="button collection-toggle celebrity-toggle" disabled={mutating} aria-pressed={!!detail.isCelebrity} aria-busy={busyAction === `celebrity-${detail.id}`} onClick={() => changeCollectionFlag(detail.id, "celebrity", !detail.isCelebrity, "detail")}><CelebrityIcon />{busyAction === `celebrity-${detail.id}` ? "Saving…" : "Celebrity"}</button><span>Shared team collections</span></div>{collectionFeedback?.source === "detail" && <p className={`collection-feedback ${collectionFeedback.error ? "error" : ""}`} role={collectionFeedback.error ? "alert" : "status"}>{collectionFeedback.message}</p>}</div>}
     {!general && <div className={`clearance-banner ${archived ? "archived" : detail.clearance?.status}`}><div><strong>{archived ? "Patient archived" : statusText(detail.clearance?.status ?? "hold")}</strong><p>{archived ? "Files and consent history are safely retained. Restore this patient to add media or share again." : cleared ? "Written consent is on file. Ready to post and share." : withdrawn ? "You can still upload and download privately. Posting and sharing are paused until new written consent is recorded." : detail.sessions.length === 0 ? "Add photos or videos to create this patient’s first session." : `${detail.clearance?.missing ?? 0} sessions need consent or upload completion before posting and sharing.`}</p></div>{archived ? <button className="button" disabled={mutating} onClick={changeArchive}>{busyAction === "restore" ? "Restoring…" : "Restore patient"}</button> : withdrawn && detail.sessions.some(s => s.finished) && <button className="button" disabled={mutating} onClick={() => openConsent("renew")}>Record new consent</button>}</div>}
     <div className="detail-actions"><a className="button primary" href={detail.download} download>↓ Download all</a>{!general && <button className="button" disabled={!cleared || !sharingReady || mutating} onClick={() => setShareOpen(!shareOpen)} aria-expanded={shareOpen}>Share by text</button>}{detail.driveUrl && <a className="button quiet" href={detail.driveUrl} target="_blank" rel="noreferrer"><FolderIcon />Open in Drive ↗</a>}{!archived && <Link className="button quiet add-media-link" href={general ? "/upload?type=general" : `/upload?patient=${detail.id}`}>＋ Add media</Link>}</div>
     {!general && cleared && !sharingReady && <p className="upload-notice">Private sharing is waiting for its secure connection to be enabled. Your files remain private.</p>}

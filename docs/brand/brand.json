@@ -9,5 +9,8 @@
   "muted": "#3e3e3e",
   "headingFont": "Roboto",
   "bodyFont": "Open Sans",
-  "note": "Website uses sans-serif headings and a monochrome palette. These replace prototype stand-ins per owner approval; no gold or serif is invented."
+  "celebrityAccent": "#b58a3a",
+  "celebrityInk": "#805b18",
+  "celebritySurface": "#fff9ed",
+  "note": "Website uses sans-serif headings and a monochrome palette. These replace prototype stand-ins per owner approval. On 2026-10-29 the owner requested gold for internal Celebrity patient markers; this accent is a portal addition, not a claim about the source website."
 }
