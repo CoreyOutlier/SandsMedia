@@ -1,0 +1,1 @@
+export default function UploadLoading(){return <section className="upload-page" aria-busy="true"><header><p className="eyebrow">Posting Center / Upload</p><h1>New upload</h1><p role="status">Opening your upload form…</p></header></section>;}

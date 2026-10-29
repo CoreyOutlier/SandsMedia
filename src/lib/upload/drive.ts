@@ -1,18 +1,18 @@
-import { google } from "googleapis";
+import { drive as createDrive, auth as googleAuth } from "googleapis/build/src/apis/drive/index.js";
 import { Readable } from "node:stream";
 import { UploadError, folderName } from "./validation";
 
-let client: ReturnType<typeof google.drive> | undefined;
+let client: ReturnType<typeof createDrive> | undefined;
 export function drive() {
   if(client) return client;
   try {
     const key=JSON.parse(Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON??"","base64").toString());
     if(key.type!=="service_account" || !key.client_email || !key.private_key) throw new Error();
-    const auth=new google.auth.GoogleAuth({credentials:key,scopes:["https://www.googleapis.com/auth/drive"]});
-    client=google.drive({version:"v3",auth}); return client;
+    const auth=new googleAuth.GoogleAuth({credentials:key,scopes:["https://www.googleapis.com/auth/drive"]});
+    client=createDrive({version:"v3",auth}); return client;
   } catch { throw new UploadError("UPLOAD_SETUP_REQUIRED",503); }
 }
-export function storageConfigured() { return !!(process.env.GOOGLE_SERVICE_ACCOUNT_JSON && process.env.DRIVE_ROOT_FOLDER_ID); }
+export { storageConfigured } from "./config";
 const escapeQ=(s:string)=>s.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
 export async function getDriveFile(id:string) {
   try { return (await drive().files.get({fileId:id,supportsAllDrives:true,fields:"id,name,mimeType,size,parents,trashed,webViewLink,appProperties,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis)"})).data; }

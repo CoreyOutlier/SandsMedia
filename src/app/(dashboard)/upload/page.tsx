@@ -1,5 +1,5 @@
 import { UploadForm } from "@/components/upload/upload-form";
-import { storageConfigured } from "@/lib/upload/drive";
+import { storageConfigured } from "@/lib/upload/config";
 import { database } from "@/lib/db";
 import { uuid } from "@/lib/upload/validation";
 import { requireDashboard } from "@/lib/dashboard";

@@ -75,3 +75,10 @@ test("expired resumable sessions and user pauses never report success",async()=>
     const controller=new AbortController();controller.abort();await assert.rejects(transfer(new File(["test"],"synthetic.jpg"),"https://example.invalid/session",()=>{},controller.signal),/paused/);
   }finally{globalThis.fetch=original;}
 });
+
+test("patient media require an explicit category and preserve choices regardless of order",()=>{
+  for(const missing of ["",undefined,null])for(const media of [photo(),video()])rejects({...batch(),files:[{...media,label:missing}]},"INVALID_LABEL");
+  const result=validateStart({...batch(),files:[{...photo(),label:"after"},{...photo(),label:"other"},{...video(),label:"before"}]},500);
+  assert.deepEqual(result.files.map(f=>f.label),["after","other","before"]);
+  assert.deepEqual(result.files.map(f=>f.name),["after-01.jpg","other-01.jpg","before-01.mp4"]);
+});

@@ -1,15 +1,16 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth, authConfigured } from "../auth";
 import { isAllowedEmail } from "./access";
 import { database } from "./db";
 import { reportError } from "./log";
 
-export async function requireDashboard() {
+export const requireDashboard = cache(async function requireDashboard() {
   if (!authConfigured()) redirect("/signin");
   const session = await auth();
   if (!isAllowedEmail(session?.user?.email, process.env.ALLOWED_EMAILS)) redirect("/signin");
   return { session };
-}
+});
 
 export async function dashboardClinic() {
   await requireDashboard();

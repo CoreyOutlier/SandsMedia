@@ -1,7 +1,9 @@
 "use client";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
+
+function PendingNavigation(){const {pending}=useLinkStatus();return pending?<span className="navigation-pending" role="status">Opening…</span>:null;}
 
 export function Navigation() {
   const pathname = usePathname();
@@ -10,7 +12,7 @@ export function Navigation() {
     { href: "/patients", label: "Patients", icon: "patients" as const },
     { href: "/other-uploads", label: "Other uploads", icon: "media" as const },
     { href: "/admin", label: "Settings", icon: "lock" as const },
-  ].map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined}>
-    <Icon name={item.icon}/><span>{item.label}</span>
+  ].map(item => <Link key={item.href} href={item.href} prefetch={true} aria-current={pathname === item.href ? "page" : undefined}>
+    <Icon name={item.icon}/><span>{item.label}</span><PendingNavigation/>
   </Link>)}</nav>;
 }

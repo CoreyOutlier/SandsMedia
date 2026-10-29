@@ -25,5 +25,12 @@ export function uploadResponse(value:unknown,status=200) {return Response.json(v
 export function uploadFailure(error:unknown) {
   // Never emit error objects: upstream errors can contain names, credentials,
   // SQL parameters, upload session URLs, or patient request bodies.
+  if(!(error instanceof UploadError)){
+    const e=error as {code?:unknown;message?:unknown;cause?:{code?:unknown}};
+    const known=["P1001","P1002","P1017","P2024","P2028","ETIMEDOUT","ECONNRESET","ECONNREFUSED","ENOTFOUND","EAI_AGAIN","SELF_SIGNED_CERT_IN_CHAIN","UNABLE_TO_VERIFY_LEAF_SIGNATURE"];
+    const code=known.find(c=>c===e?.code||c===e?.cause?.code);
+    const message=typeof e?.message==="string"?e.message.toLowerCase():"";
+    console.error(code?`REQUEST_FAILURE_${code}`:message.includes("timeout")||message.includes("timed out")?"REQUEST_FAILURE_TIMEOUT":message.includes("permission denied")?"REQUEST_FAILURE_PERMISSION":message.includes("certificate")?"REQUEST_FAILURE_CERTIFICATE":"REQUEST_FAILURE_UNKNOWN");
+  }
   return uploadResponse({error:error instanceof UploadError?error.code:"UPLOAD_UNAVAILABLE"},error instanceof UploadError?error.status:503);
 }

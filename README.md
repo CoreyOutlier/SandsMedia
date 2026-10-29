@@ -103,6 +103,44 @@ domain; no DNS change was made. Use https://sandsmedia-platform.vercel.app.
   existing bytes plus the new row while holding a clinic lock. The database is the
   permanent append-only authority. A conflicting mirror stops finalization.
 
+### Explicit media categories
+
+Patient photos and videos begin with no category selected. Every file must be
+classified as Before, After, Testimonial, or Other before any upload session starts.
+Selection order never assigns a category. General uploads remain Other. Categories
+on already-started batches stay locked to preserve the saved manifest, Drive names,
+and retry identity; this change does not reclassify existing uploads or consent.
+
+### Preview, navigation and withdrawal feedback
+
+Upload cards, directory thumbnails, and share comparisons fit the whole image
+inside their frame rather than cropping it. Original pixels are unaffected.
+Navigation prefetches routes and shows a pending label/loading view. The upload
+page's readiness check no longer imports the Google API SDK. Drive operations load
+only the Drive-specific module from the existing googleapis dependency. Repeated dashboard
+auth checks are deduplicated within a render (never shared between users).
+Withdrawal shows progress and errors next to its confirmation button and a local
+success message. A transient connection/server failure retries withdrawal once,
+using the same idempotent action; authorization failures never retry. It avoids a redundant full detail reload after success. Its
+transaction reads only patient identity/withdrawal state, instead of loading all
+media, and permits 15 seconds for the atomic withdrawal/link revocation. Consent
+history remains append-only. The original browser test encountered a transient
+request failure; a retry succeeded. This is not proof of the user's exact failure
+cause. Database connection establishment is bounded to 10 seconds, idle pooled
+connections expire after 10 seconds, and TCP keepalive is enabled. Diagnostics emit
+fixed error codes only, never raw upstream errors, request bodies, or patient data.
+
+Verification for this update: the production build, authentication checks, and
+23 unit tests pass, including explicit category
+validation and a single safe withdrawal retry. Browser checks confirmed blank
+initial categories, explicit photo/video choices, uncropped previews, and withdrawal
+success feedback. An isolated database/API test confirmed withdrawal, all-link
+revocation, unchanged consent-event count, and an unchanged withdrawal timestamp
+on retry (2.2 seconds for withdrawal and verification). The broader integration
+suite encountered intermittent upstream timeouts; a later run was interrupted when
+the isolated database connection became unavailable. Do not represent that broader
+suite as passing for this update or these local timings as production guarantees.
+
 ## Two libraries
 
 The owner added Other uploads on 2026-10-28. Patients retain the exact patient/session

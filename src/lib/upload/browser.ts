@@ -1,7 +1,7 @@
 import imageCompression from "browser-image-compression";
 import type { FilePlan, Label } from "./validation";
-export type PickedFile={plan:FilePlan;file:File;preview:string;progress:number};
-export async function prepareFile(input:File,index:number,maxVideoMB:number):Promise<PickedFile> {
+export type PickedFile={plan:Omit<FilePlan,"label"> & {label:Label|""};file:File;preview:string;progress:number};
+export async function prepareFile(input:File,maxVideoMB:number):Promise<PickedFile> {
   const video=input.type.startsWith("video/");
   if(!video && !input.type.startsWith("image/"))throw new Error("Choose a photo or video.");
   if(video && input.size>maxVideoMB*1024*1024)throw new Error(`Each video must be ${maxVideoMB} MB or smaller.`);
@@ -28,7 +28,7 @@ export async function prepareFile(input:File,index:number,maxVideoMB:number):Pro
   const sample=new Blob([file.slice(0,65536),file.slice(Math.max(0,file.size-65536)),`${file.size}:${file.type}`]);
   const digest=await crypto.subtle.digest("SHA-256",await sample.arrayBuffer());
   const fingerprint=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
-  return {file,preview,progress:0,plan:{key:crypto.randomUUID(),fingerprint,kind:video?"video":"photo",label:(video?"testimonial":index%2?"after":"before") as Label,mimeType:video?file.type:"image/jpeg",bytes:file.size,...dimensions,name:""}};
+  return {file,preview,progress:0,plan:{key:crypto.randomUUID(),fingerprint,kind:video?"video":"photo",label:"",mimeType:video?file.type:"image/jpeg",bytes:file.size,...dimensions,name:""}};
 }
 export async function api<T>(path:string,body?:unknown):Promise<T> {
   let response:Response;
