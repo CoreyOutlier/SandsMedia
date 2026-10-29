@@ -2,8 +2,8 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 export const newToken = () => randomBytes(32).toString("base64url");
 export function validToken(token: unknown): token is string { return typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token); }
-export function activeLink(link: { expiresAt: Date | string; revokedAt: unknown; patient: { consentWithdrawnAt: unknown } }, now = Date.now()) {
-  return !link.revokedAt && !link.patient.consentWithdrawnAt && new Date(link.expiresAt).getTime() > now;
+export function activeLink(link: { expiresAt: Date | string; revokedAt: unknown; patient: { consentWithdrawnAt: unknown; archivedAt?: unknown } }, now = Date.now()) {
+  return !link.revokedAt && !link.patient.consentWithdrawnAt && !link.patient.archivedAt && new Date(link.expiresAt).getTime() > now;
 }
 function secret() { const value = process.env.SHARE_SECRET; if (!value || value.length < 32) throw new Error("SHARE_SETUP_REQUIRED"); return value; }
 export function signTicket(value: Record<string, unknown>, purpose: string) {

@@ -51,12 +51,16 @@ model Patient {
   // Nullable only while Drive provisioning is incomplete.
   driveFolderId      String?     @unique @map("drive_folder_id")
   consentWithdrawnAt DateTime?   @map("consent_withdrawn_at") @db.Timestamptz(3)
+  lifecycleVersion   Int         @default(0) @map("lifecycle_version")
+  archivedAt         DateTime?   @map("archived_at") @db.Timestamptz(3)
   createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   clinic             Clinic      @relation(fields: [clinicId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   sessions           Session[]
   shareLinks         ShareLink[]
+  activities         PatientActivity[]
 
   // Clearance is derived, never a mutable column.
+  @@index([clinicId, archivedAt])
   @@unique([clinicId, displayId])
   @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -97,6 +101,7 @@ model Media {
   driveFileId String     @unique @map("drive_file_id")
   // Generated label-counter name in Drive, never an original device filename.
   fileName    String     @map("file_name")
+  title       String?
   // Stable upload order for before/after pairing and retry deduplication.
   position    Int
   width       Int?
@@ -109,6 +114,7 @@ model Media {
   @@unique([sessionId, position])
   @@unique([sessionId, fileName])
   @@index([sessionId, kind])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("media")
 }
 
@@ -118,6 +124,8 @@ model ConsentEvent {
   id                 String   @id @default(uuid()) @db.Uuid
   sessionId          String   @map("session_id") @db.Uuid
   consented          Boolean
+  renewalId          String?  @map("renewal_id") @db.Uuid
+  renewal            PatientActivity? @relation(fields: [renewalId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   formOnFile         Boolean  @map("form_on_file")
   consentTextVersion Int      @map("consent_text_version")
   // Immutable snapshot retains the exact sentence alongside its version.
@@ -129,6 +137,7 @@ model ConsentEvent {
   session            Session  @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([sessionId, createdAt])
+  @@unique([sessionId, renewalId])
   @@map("consent_events")
 }
 
@@ -192,6 +201,7 @@ model GeneralMedia {
   kind            MediaKind
   driveFileId     String        @unique @map("drive_file_id")
   fileName        String        @map("file_name")
+  title           String?
   position        Int
   width           Int?
   height          Int?
@@ -203,6 +213,7 @@ model GeneralMedia {
   @@unique([generalUploadId, position])
   @@unique([generalUploadId, fileName])
   @@index([generalUploadId, kind])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("general_media")
 }
 
@@ -234,4 +245,22 @@ model UploadAttempt {
   startedAt DateTime @map("started_at") @db.Timestamptz(3)
   attempts  Int      @default(0)
   @@map("upload_attempts")
+}
+
+// Append-only audit of patient lifecycle changes. Renewal events refer to the
+// initial operation record; a separate completion record preserves both stages.
+model PatientActivity {
+  id          String   @id @default(uuid()) @db.Uuid
+  patientId   String   @map("patient_id") @db.Uuid
+  action      String
+  actor       String
+  operationId String?  @map("operation_id") @db.Uuid
+  patientVersion Int @map("patient_version")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  renewals    ConsentEvent[]
+
+  @@index([patientId, createdAt(sort: Desc)])
+  @@unique([operationId, action])
+  @@map("patient_activities")
 }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { validateStart, UploadError, patientFolderName } from "../src/lib/upload/validation.ts";
+import { validateStart, UploadError, patientFolderName, mediaTitle, namedVideoFile } from "../src/lib/upload/validation.ts";
 import { seal, unseal, signCookie, readCookie, principalHash } from "../src/lib/upload/security.ts";
 import { transfer } from "../src/lib/upload/browser.ts";
 
@@ -81,4 +81,34 @@ test("patient media require an explicit category and preserve choices regardless
   const result=validateStart({...batch(),files:[{...photo(),label:"after"},{...photo(),label:"other"},{...video(),label:"before"}]},500);
   assert.deepEqual(result.files.map(f=>f.label),["after","other","before"]);
   assert.deepEqual(result.files.map(f=>f.name),["after-01.jpg","other-01.jpg","before-01.mp4"]);
+});
+
+test("optional video titles preserve Unicode and remove path/control characters",()=>{
+  assert.equal(mediaTitle("  Sourire / première\\prise\n🎬  "),"Sourire première prise 🎬");
+  assert.equal(mediaTitle("Smile\u202ereveal\u0000"),"Smile reveal");
+  assert.equal(mediaTitle("Cafe\u0301"),"Café");
+  for(const empty of [undefined,null,""," /\\\n "])assert.equal(mediaTitle(empty),null);
+  for(const invalid of [42,{},[],"x".repeat(121)])assert.throws(()=>mediaTitle(invalid),(e:unknown)=>e instanceof UploadError&&e.code==="INVALID_MEDIA_TITLE");
+  const result=validateStart({...batch(),files:[{...video(),title:"  Smile / reveal  "}]},500);
+  assert.equal(result.files[0].title,"Smile reveal");
+  assert.equal(result.files[0].name,"testimonial-01 - Smile reveal.mp4");
+});
+
+test("duplicate video titles retain unique label-counters and stable retry names",()=>{
+  const input={...batch(),files:[{...video(),title:"Take one"},photo(),{...video(),title:"Take one"},{...video(),label:"other",title:"Take one"}]};
+  const result=validateStart(input,500);
+  assert.deepEqual(result.files.map(f=>f.name),["testimonial-01 - Take one.mp4","before-01.jpg","testimonial-02 - Take one.mp4","other-01 - Take one.mp4"]);
+  assert.deepEqual(validateStart(input,500).files,result.files);
+  assert.equal(namedVideoFile(result.files[2].name,"New title"),"testimonial-02 - New title.mp4");
+  assert.equal(namedVideoFile("testimonial-02 - New title.mp4",null),"testimonial-02.mp4");
+  assert.equal(namedVideoFile("other-08.mov","A .mp4 and .mov title"),"other-08 - A .mp4 and .mov title.mov");
+});
+
+test("old manifests and unnamed videos retain their existing generated names",()=>{
+  const old=validateStart(batch(),500);
+  assert.deepEqual(old.files.map(f=>f.name),["before-01.jpg","before-02.jpg","testimonial-01.mp4"]);
+  assert.ok(old.files.every(f=>f.title===null));
+  const general=validateStart({...batch(),kind:"general",title:"Office tour",files:[{...video(),title:"Reception"},{...video(),title:"Reception"}]},500);
+  assert.deepEqual(general.files.map(f=>f.name),["other-01 - Reception.mp4","other-02 - Reception.mp4"]);
+  assert.throws(()=>namedVideoFile("untrusted-device-name.mp4","Title"),(e:unknown)=>e instanceof UploadError&&e.code==="INVALID_MEDIA_NAME");
 });

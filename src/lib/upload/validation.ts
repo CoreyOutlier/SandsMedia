@@ -5,11 +5,26 @@ export class UploadError extends Error {
 }
 export const labels = ["before", "after", "testimonial", "other"] as const;
 export type Label = typeof labels[number];
-export type FilePlan = { key: string; fingerprint: string; kind: "photo" | "video"; label: Label; mimeType: string; bytes: number; width: number; height: number; durationS: number | null; name: string; driveId?: string; encryptedUrl?: string; confirmed?: boolean };
+export type FilePlan = { key: string; fingerprint: string; kind: "photo" | "video"; label: Label; mimeType: string; bytes: number; width: number; height: number; durationS: number | null; name: string; title?: string | null; driveId?: string; encryptedUrl?: string; confirmed?: boolean };
 export const uuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 export function textField(v: unknown, max: number, required = true, multiline = false): string {
   if (typeof v !== "string" || v.length > max || /[\u0000-\u001f\u007f]/.test(multiline?v.replace(/\n/g, ""):v)) throw new UploadError("INVALID_FIELDS");
   const s = v.trim(); if (required && !s) throw new UploadError("REQUIRED_FIELDS"); return s;
+}
+// Titles are user-supplied display text, never an original device filename.
+// Keep Unicode while removing separators, control characters and bidi overrides.
+export function mediaTitle(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length > 120) throw new UploadError("INVALID_MEDIA_TITLE");
+  const title = value.normalize("NFC").replace(/[\/\\\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g," ").replace(/\s+/g," ").trim();
+  return title || null;
+}
+export function namedVideoFile(existingName: string, title: string | null): string {
+  // Preserve the original label-counter identity even after several renames.
+  // Two videos with the same title still have distinct stable Drive filenames.
+  const match = /^(before|after|testimonial|other)-(\d+)(?: - .*)?\.(mp4|mov|webm|m4v)$/.exec(existingName);
+  if (!match) throw new UploadError("INVALID_MEDIA_NAME",409);
+  return `${match[1]}-${match[2]}${title ? ` - ${title}` : ""}.${match[3]}`;
 }
 export function validateStart(value: unknown, maxVideoMB: number) {
   if(!Number.isFinite(maxVideoMB)||maxVideoMB<=0||maxVideoMB>500) throw new UploadError("UPLOAD_SETUP_REQUIRED",503);
@@ -41,7 +56,9 @@ export function validateStart(value: unknown, maxVideoMB: number) {
     const label = general ? "other" : f.label;
     if (!labels.includes(label as Label)) throw new UploadError("INVALID_LABEL");
     const counterKey = `${kind}:${label}`; counters[counterKey]=(counters[counterKey]??0)+1;
-    return { key:f.key, fingerprint:f.fingerprint, kind, label:label as Label, mimeType:String(mime), bytes:Number(f.bytes), width:Number(f.width), height:Number(f.height), durationS:kind === "video" ? Number(f.durationS) : null, name:`${label}-${String(counters[counterKey]).padStart(2,"0")}.${ext}` };
+    const title = kind === "video" ? mediaTitle(f.title) : null;
+    const name = `${label}-${String(counters[counterKey]).padStart(2,"0")}.${ext}`;
+    return { key:f.key, fingerprint:f.fingerprint, kind, label:label as Label, mimeType:String(mime), bytes:Number(f.bytes), width:Number(f.width), height:Number(f.height), durationS:kind === "video" ? Number(f.durationS) : null, title, name:kind === "video" ? namedVideoFile(name,title) : name };
   });
   return { uploadId:x.uploadId, general, patientId:patientId as string|null, firstName,lastName,title,description,uploadedBy,date,consented:!general && x.consented,formOnFile:!general && x.formOnFile,files };
 }

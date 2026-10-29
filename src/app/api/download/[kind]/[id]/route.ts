@@ -4,6 +4,7 @@ import { database } from "@/lib/db";
 import { portalIdentity } from "@/lib/portal/access";
 import { ticketShare } from "@/lib/portal/shares";
 import { driveStream } from "@/lib/portal/media";
+import { downloadDisposition } from "@/lib/portal/download";
 import { drive } from "@/lib/upload/drive";
 import { uploadFailure } from "@/lib/upload/http";
 import { uuid,UploadError } from "@/lib/upload/validation";
@@ -34,5 +35,5 @@ export async function GET(request:Request,{params}:{params:Promise<{kind:string;
  // Stream one remote source at a time with backpressure. No file or complete ZIP
  // is buffered on disk or in memory. Public ZIPs exclude consent audit documents.
  void(async()=>{try{for(const file of files){if(request.signal.aborted)break;if(shareId)await ticketShare(new URL(request.url).searchParams.get("ticket"));const source=(await driveStream(file.driveFileId,undefined,request.signal)).data;await new Promise<void>((resolve,reject)=>{source.once("end",resolve);source.once("error",()=>reject(new Error("DOWNLOAD_FAILED")));archive.append(source,{name:file.fileName});});}await archive.finalize();}catch{archive.destroy(new Error("DOWNLOAD_FAILED"));}})();
- return new Response(Readable.toWeb(archive) as ReadableStream,{headers:{"Content-Type":"application/zip","Content-Disposition":`attachment; filename="media.zip"; filename*=UTF-8''${encodeURIComponent(safe(name)+".zip")}`,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
+ return new Response(Readable.toWeb(archive) as ReadableStream,{headers:{"Content-Type":"application/zip","Content-Disposition":downloadDisposition(safe(name)+".zip"),"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
 }catch(e){return uploadFailure(e);}}

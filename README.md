@@ -8,7 +8,69 @@ The temporary test origin is https://sandsmedia-platform.vercel.app.
 The specification is [docs/BRIEF.md](docs/BRIEF.md). The
 [prototype](docs/prototype.html) is reference material, never served or embedded.
 
-## Current release: complete portal implementation
+## Library redesign, renewed consent, and patient archive — 29 October 2026
+
+The owner requested simpler filters, visible downloads, individual video titles,
+renewed consent after withdrawal, and reversible patient removal. This release adds:
+
+- One search and a compact Consent / Media / Library filter bar, with no duplicate
+  pill rows. Downloads are visible on every file and in the full-image viewer.
+- Each session links directly to its private Photos and Videos folders. A read-only
+  production audit verified all seven confirmed files existed in the expected
+  private folders, including all three photos; none was missing or public.
+- Optional 120-character video titles on upload and editable titles for completed
+  videos in both libraries. Drive keeps the category-counter and extension for
+  uniqueness. Search includes video titles. Downloads preserve Unicode names.
+- Archive/restore retains files and consent history. Archived patients leave the
+  default library and upload picker; posting, sharing and new upload activity are
+  blocked server-side. Archiving revokes all existing links. Restoring never
+  unrevokes them or changes consent status. There is no patient delete endpoint.
+- Renewed consent requires explicit confirmation that a new signed form covers all
+  completed sessions. A new ConsentEvent is appended per completed session, then a
+  separate consent-renewal JSON and CSV entry are written to Drive before withdrawal
+  is cleared. Original consent records/files remain unchanged. Old links stay revoked.
+- PatientActivity records withdrawal, renewal, archive and restore as append-only
+  history. Lifecycle versions prevent a slow renewal from overriding a later action.
+  A stable request UUID and per-event mirror locks make concurrent retries safe.
+
+The additive migration is
+`prisma/migrations/202610290003_patient_lifecycle_titles/migration.sql`.
+It adds archive state/version, video titles, renewal references and a guarded audit
+history table; existing withdrawals are copied into history. The runtime role gets
+only SELECT/INSERT on the new audit table. No patient contact information is added.
+Migration uses the separate owner connection, never the production runtime role.
+The Prisma schema additions were shown before applying the test migration.
+The migration is also applied in production; pre/post aggregate checks confirmed
+existing record counts were preserved and both audit tables remain SELECT/INSERT
+only for the runtime login. Node pg uses sslmode=verify-full; the Prisma migration
+engine uses its supported sslmode=require&sslaccept=strict combination with the
+separate owner connection. See the [Prisma PostgreSQL connector reference](https://www.prisma.io/docs/orm/v7/core-concepts/supported-databases/postgresql).
+
+Short database transactions allow 20 seconds with a 10-second pool wait, instead
+of the library's previous five-second default that produced observed P2028 errors.
+Fresh standalone test-database probes showed slow TLS/authentication, with no
+blocked queries or pool saturation. Connections now allow 20 seconds, and idle
+connections stay warm for 60 seconds to reduce repeated handshakes. Thumbnail
+requests retry once; persistent preview errors show a clear Open file fallback
+while keeping Download available. Error logging remains fixed codes only.
+No new dependencies or environment variables were introduced.
+
+Verification: all 34 unit tests, production build, authentication and HTTP checks
+passed. The synthetic lifecycle workflow passed with no client retries, including
+concurrent renewal requests and archive/restore protections. Video naming, stale
+renewal rejection, full-file SHA-256 download comparisons and ZIP/range checks
+passed. Some earlier checks hit connection timeouts; focused reruns passed. Browser
+checks at 390 px found no overflow and all visible controls at least 44 px.
+
+Acceptance scripts use only `sandsmedia_upload_test` and localhost:3102:
+`lifecycle-integration.mjs`, `stale-renewal-integration.mjs`,
+`media-title-integration.mjs`, and `download-integration.mjs` under `scripts/`.
+They verify immutable records, renewal retries, Drive copies, revoked links,
+archive/restore, upload isolation, video title consistency and downloaded bytes.
+The download is the saved 2048 px JPEG for photos and the unchanged upload for video;
+it does not recover the larger pre-compression camera photo.
+
+## Previous release: complete portal implementation
 
 On 29 October 2026 the owner authorized finishing the remaining steps without
 waiting between checkpoints, and reported that saving was unavailable. The upload

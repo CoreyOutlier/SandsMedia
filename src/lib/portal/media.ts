@@ -4,6 +4,7 @@ import { ticketShare } from "./shares";
 import { uuid,UploadError } from "@/lib/upload/validation";
 import { drive } from "@/lib/upload/drive";
 import { byteRange } from "./security";
+import { downloadDisposition } from "./download";
 import { Readable } from "node:stream";
 export async function allowedMedia(id:string,request:Request){
  if(!uuid(id))throw new UploadError("MEDIA_NOT_FOUND",404);
@@ -33,6 +34,6 @@ export async function mediaResponse(m:{driveFileId:string;fileName:string;bytes:
  const response=await driveStream(m.driveFileId,range?`bytes=${range.start}-${range.end}`:undefined,request.signal);
  headers.set("Content-Type",meta.mimeType??"application/octet-stream");headers.set("Accept-Ranges","bytes");headers.set("Content-Length",String(range?range.end-range.start+1:size));
  if(range)headers.set("Content-Range",`bytes ${range.start}-${range.end}/${size}`);
- if(action==="download")headers.set("Content-Disposition",`attachment; filename="${m.fileName.replace(/[^a-zA-Z0-9_.-]/g,"_")}"`);
+ if(action==="download")headers.set("Content-Disposition",downloadDisposition(m.fileName));
  return new Response(Readable.toWeb(response.data) as ReadableStream,{status:range?206:200,headers});
 }

@@ -41,23 +41,31 @@ export async function mintUpload(id:string,parent:string,name:string,mimeType:st
   if(!url || new URL(url).origin!=="https://www.googleapis.com") throw new UploadError("DRIVE_UNAVAILABLE",503);
   return url;
 }
-export async function writeConsentFile(parent:string,eventId:string,content:object) {
-  const api=drive(); const q=`'${escapeQ(parent)}' in parents and trashed=false and name='consent.json'`;
+export async function writeConsentFile(parent:string,eventId:string,content:object,renewal=false) {
+  const api=drive(); const name=renewal?`consent-renewal-${eventId}.json`:"consent.json";
+  const q=`'${escapeQ(parent)}' in parents and trashed=false and name='${escapeQ(name)}'`;
   const found=await api.files.list({q,supportsAllDrives:true,includeItemsFromAllDrives:true,fields:"files(id,appProperties)"});
   if(found.data.files?.length) { if(found.data.files.length!==1 || found.data.files[0].appProperties?.consentEventId!==eventId) throw new UploadError("CONSENT_FILE_CONFLICT",409); return; }
-  await api.files.create({supportsAllDrives:true,requestBody:{name:"consent.json",parents:[parent],appProperties:{consentEventId:eventId}},media:{mimeType:"application/json",body:Readable.from([JSON.stringify(content)])},fields:"id"});
+  await api.files.create({supportsAllDrives:true,requestBody:{name,parents:[parent],appProperties:{consentEventId:eventId}},media:{mimeType:"application/json",body:Readable.from([JSON.stringify(content)])},fields:"id"});
 }
 export async function appendConsentMirror(root:string,eventId:string,values:string[]) {
+  return appendConsentMirrors(root,[{eventId,values}]);
+}
+export async function appendConsentMirrors(root:string,entries:{eventId:string;values:string[]}[]) {
   const api=drive();const found=await api.files.list({q:`'${escapeQ(root)}' in parents and trashed=false and name='_consent-log.csv'`,supportsAllDrives:true,includeItemsFromAllDrives:true,fields:"files(id,size)"});
   if((found.data.files?.length??0)>1)throw new UploadError("CONSENT_FILE_CONFLICT",409);
   const entry=found.data.files?.[0];const header="event_id,patient_id,session_date,consent_text_version,consent_text,consented_by,form_on_file,timestamp,ip,user_agent\r\n";
   let previous=header;
   if(entry?.id){if(Number(entry.size)>10*1024*1024)throw new UploadError("CONSENT_LOG_REVIEW_REQUIRED",409);const r=await api.files.get({fileId:entry.id,alt:"media",supportsAllDrives:true},{responseType:"text"});previous=String(r.data);if(!previous.startsWith(header))throw new UploadError("CONSENT_FILE_CONFLICT",409);}
   const quote=(v:string)=>`"${v.replace(/"/g,'""').replace(/[\r\n]/g," ")}"`;
-  const line=[eventId,...values].map(quote).join(",")+"\r\n";
-  const old=previous.split("\r\n").find(l=>l.startsWith(quote(eventId)+","));
-  if(old){if(old+"\r\n"!==line)throw new UploadError("CONSENT_FILE_CONFLICT",409);return;}
-  const media={mimeType:"text/csv",body:Readable.from([previous+line])};
+  let next=previous;
+  for(const {eventId,values} of entries){
+    const line=[eventId,...values].map(quote).join(",")+"\r\n";
+    const old=next.split("\r\n").find(l=>l.startsWith(quote(eventId)+","));
+    if(old){if(old+"\r\n"!==line)throw new UploadError("CONSENT_FILE_CONFLICT",409);}else next+=line;
+  }
+  if(next===previous)return;
+  const media={mimeType:"text/csv",body:Readable.from([next])};
   if(entry?.id)await api.files.update({fileId:entry.id,supportsAllDrives:true,media,fields:"id"});
   else await api.files.create({supportsAllDrives:true,requestBody:{name:"_consent-log.csv",parents:[root]},media,fields:"id"});
 }
