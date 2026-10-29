@@ -17,7 +17,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   assert.ok(ready, "Isolated test server must start");
-  for (const route of ["/patients", "/other-uploads"]) {
+  for (const route of ["/patients", "/other-uploads", "/upload"]) {
     for (const identity of [
       { email: "allowed@example.test", verifiedGoogle: true, expected: 200 },
       { email: "removed@example.test", verifiedGoogle: true, expected: 307 },
@@ -28,10 +28,18 @@ try {
       assert.equal(response.status, identity.expected);
       if (identity.expected === 200) {
         const html = await response.text();
-        assert.ok(html.includes(route === "/patients" ? "Patient directory" : "Your uploads"));
+        assert.ok(html.includes(route === "/patients" ? "Patient directory" : route === "/upload" ? "Consent to share" : "Your uploads"));
         assert.ok(html.includes("Sign out"));
+        if(route==="/upload"){
+          for(const text of ["Treatment","Uploaded by","Save to Drive","Choose several together"])assert.ok(html.includes(text));
+          assert.ok(html.includes('multiple=""'));
+          assert.ok(html.includes("Storage setup is in progress"));
+        }
       }
     }
   }
-  console.info("Authenticated route checks passed: both libraries render for an approved verified session, reject removed accounts, and reject unverified sessions.");
+  const generalJwt=await encode({secret,salt:"authjs.session-token",token:{sub:"test-user",email:"allowed@example.test",verifiedGoogle:true},maxAge:60});
+  const general=await (await fetch(origin+"/upload?type=general",{headers:{cookie:`authjs.session-token=${generalJwt}`}})).text();
+  assert.ok(general.includes("e.g. Office tour"));assert.ok(!general.includes("Consent to share"));
+  console.info("Authenticated route checks passed: libraries and upload form reject removed/unverified accounts; patient fields, consent, multiple files and general-upload mode render.");
 } finally { server.kill("SIGTERM"); }

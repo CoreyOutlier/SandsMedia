@@ -57,16 +57,34 @@ Posting Center/
   Patients/
     Alvarez, Jordan – DS-0141/
       2026-10-19 Porcelain veneers/
-        before-01.jpg
-        after-01.jpg
-        other-01.mp4
+        Photos/
+          before-01.jpg
+          after-01.jpg
+        Videos/
+          other-01.mp4
         consent.json
       2026-10-05 Porcelain veneers/
     Bennett, Priya – DS-0138/
   _consent-log.csv        (append-only mirror of the consent table)
 ```
 
-`consent.json` is written next to the files whenever consent is ticked, so the record travels with them if someone moves or shares the folder. It holds the patient ID, session date, the exact consent sentence shown (with a version number), who ticked it, timestamp, IP and user agent.
+Owner clarification, 28 October 2026: keep one persistent patient folder and organize
+each dated upload into `Photos` and `Videos` child folders. In the app, opening a
+patient exposes All media / Photos / Videos across their uploads, retaining date
+and treatment grouping. Staff do not need to navigate Drive folders to find media.
+Folder identity is the patient ID and upload UUID, never a name/title alone. Two
+different patients with the same name remain separate; retrying an upload reuses
+its existing folders. Separate uploads on the same date/treatment need distinct
+session folders, with a short upload-ID suffix when their display names collide.
+
+`consent.json` is written in the dated session folder alongside its Photos and
+Videos folders whenever consent is ticked, so the record travels with the complete
+session folder. It holds the patient ID, session date, the exact consent sentence
+shown (with a version number), who ticked it, timestamp, IP and user agent.
+The media signing and confirmation steps below must use the session's matching
+Photos or Videos child folder, and verify that child belongs to the authorized
+session. This clarification supersedes the original flat session-file layout;
+the necessary folder-ID model changes must be reviewed before a new migration.
 
 Database tables (Prisma):
 
@@ -202,3 +220,43 @@ Three calls were made in this brief that the owner may want to overturn. Confirm
   Prisma PostgreSQL adapter/pg packages were approved.
 - Repository: CoreyOutlier/SandsMedia. Vercel project: sandsmedia-platform under
   Outlier Creative Agency. Test origin: https://sandsmedia-platform.vercel.app.
+- The owner subsequently clarified that they do not own the proposed custom
+  domain. Use the Vercel origin for testing; no DNS changes are authorized or needed.
+
+### Upload and organization clarification (requirements, not completed features)
+
+- A patient upload accepts one photo, many photos, videos, or a mixed batch of
+  photos and videos together. Choose the patient once, preview all selected files,
+  add/remove files before submitting, label each file, and save once. Choosing
+  another file must append to the selection rather than discard earlier choices.
+- The UI presents one batch with per-file progress. Files transfer sequentially
+  under the existing iOS/resume rules. A partial failure must remain visible and
+  retryable; never display complete success while any selected file is unfinished.
+- New patient: create one patient row and one patient folder. Existing patient:
+  reuse both and create a dated upload/session beneath that patient. Submitting or
+  retrying must never create duplicate patients or overwrite earlier media.
+- Patient detail makes Photos and Videos easy to find across all sessions, with
+  dates, treatment, notes, uploader, and consent status. Patient identity remains
+  name and display ID only; no additional patient contact or demographic fields.
+- Other uploads requires a title. Each new submission creates a separate folder
+  `Other uploads/{date title – upload ID}` with Photos/Videos children as needed.
+  A single random video gets its own titled upload folder. A related mixed batch
+  stays together in one titled folder; it does not create one folder per file.
+  Reusing a title on a later upload does not overwrite or merge earlier uploads.
+- Search Patients by name, display ID, or treatment and combine it with media and
+  clearance filters. Search Other uploads by title or description and filter by
+  Photos/Videos. General footage remains separate from patient records and cannot
+  bypass patient consent requirements.
+
+Additional acceptance tests for these clarified requirements:
+
+- [ ] Select six photos and one video for one patient and save once; all seven
+  appear under that patient with correct Photos/Videos placement and one session.
+- [ ] Add another batch to the same patient; no second patient folder is created,
+  and both batches are visible. Identically named patients remain distinguishable.
+- [ ] Retry a failed mixed batch; already completed files are not duplicated, and
+  success is shown only after every selected file is confirmed.
+- [ ] Upload one general video with a title, then a separate batch with the same
+  title; two distinct titled folders remain searchable without overwriting files.
+- [ ] Patient Photos/Videos filters work across visits; Other uploads title search
+  returns its matching batch and the media-kind filter shows only matching files.

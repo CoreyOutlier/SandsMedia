@@ -1,5 +1,5 @@
-// Step 1 review draft. No migration has been applied.
-// DATABASE_URL will be supplied through prisma.config.ts, never embedded here.
+// Step 1 foundation. Initial migration applied to the empty test deployment database.
+// DATABASE_URL is supplied through prisma7.config.ts, never embedded here.
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -37,6 +37,7 @@ model Clinic {
   nextPatientNumber Int       @default(1) @map("next_patient_number")
   patients           Patient[]
   generalUploads     GeneralUpload[]
+  uploadBatches      UploadBatch[]
 
   @@map("clinics")
 }
@@ -81,6 +82,7 @@ model Session {
   patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   media            Media[]
   consentEvents    ConsentEvent[]
+  uploadBatch      UploadBatch?
 
   @@index([patientId, date(sort: Desc)])
   @@index([treatment(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -177,6 +179,7 @@ model GeneralUpload {
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   clinic        Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   media         GeneralMedia[]
+  uploadBatch   UploadBatch?
 
   @@index([clinicId, date(sort: Desc)])
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -201,4 +204,34 @@ model GeneralMedia {
   @@unique([generalUploadId, fileName])
   @@index([generalUploadId, kind])
   @@map("general_media")
+}
+
+// Durable upload intent and file manifest. No original device filenames.
+// Resumable upload URLs in the manifest are encrypted server-side.
+model UploadBatch {
+  id              String         @id @db.Uuid
+  clinicId        String         @map("clinic_id") @db.Uuid
+  sessionId       String?        @unique @map("session_id") @db.Uuid
+  generalUploadId String?        @unique @map("general_upload_id") @db.Uuid
+  principalHash   String         @map("principal_hash")
+  consented       Boolean        @default(false)
+  formOnFile      Boolean        @default(false) @map("form_on_file")
+  manifest        Json
+  photosFolderId  String?        @map("photos_folder_id")
+  videosFolderId  String?        @map("videos_folder_id")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  clinic          Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  session         Session?       @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  generalUpload   GeneralUpload? @relation(fields: [generalUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([clinicId, createdAt])
+  @@map("upload_batches")
+}
+
+// Shared database-backed passcode throttling, including across Vercel instances.
+model UploadAttempt {
+  key       String   @id
+  startedAt DateTime @map("started_at") @db.Timestamptz(3)
+  attempts  Int      @default(0)
+  @@map("upload_attempts")
 }

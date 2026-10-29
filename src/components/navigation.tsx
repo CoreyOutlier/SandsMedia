@@ -6,6 +6,7 @@ import { Icon } from "./icons";
 export function Navigation() {
   const pathname = usePathname();
   return <nav aria-label="Libraries" className="navigation">{[
+    { href: "/upload", label: "Upload", icon: "upload" as const },
     { href: "/patients", label: "Patients", icon: "patients" as const },
     { href: "/other-uploads", label: "Other uploads", icon: "media" as const },
   ].map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined}>
