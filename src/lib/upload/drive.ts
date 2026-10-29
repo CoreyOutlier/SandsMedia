@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 import { UploadError, folderName } from "./validation";
 
 let client: ReturnType<typeof google.drive> | undefined;
-function drive() {
+export function drive() {
   if(client) return client;
   try {
     const key=JSON.parse(Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON??"","base64").toString());

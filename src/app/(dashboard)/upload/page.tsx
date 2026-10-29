@@ -1,7 +1,10 @@
 import { UploadForm } from "@/components/upload/upload-form";
 import { storageConfigured } from "@/lib/upload/drive";
+import { database } from "@/lib/db";
+import { uuid } from "@/lib/upload/validation";
 import { requireDashboard } from "@/lib/dashboard";
-export default async function UploadPage({searchParams}:{searchParams:Promise<{type?:string}>}) {
+export default async function UploadPage({searchParams}:{searchParams:Promise<{type?:string;patient?:string}>}) {
   const {session}=await requireDashboard();const params=await searchParams;
-  return <UploadForm initialGeneral={params.type==="general"} initialUploader={session?.user?.name??""} maxVideoMB={Number(process.env.MAX_VIDEO_MB??500)} ready={storageConfigured()} testMode={process.env.SYNTHETIC_TEST_MODE!=="false"}/>;
+  const initialPatient=params.patient&&uuid(params.patient)?await database().patient.findFirst({where:{id:params.patient,clinic:{slug:process.env.CLINIC_SLUG??"dr-sands"}},select:{id:true,firstName:true,lastName:true,displayId:true}}):null;
+  return <UploadForm initialPatient={initialPatient} initialGeneral={params.type==="general"} initialUploader={session?.user?.name??""} maxVideoMB={Number(process.env.MAX_VIDEO_MB??500)} ready={storageConfigured()} testMode={process.env.SYNTHETIC_TEST_MODE!=="false"}/>;
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 // Run against a local build or deployment without supplying any credentials.
 const base = process.argv[2] ?? "http://127.0.0.1:3100";
-for (const path of ["/patients", "/other-uploads", "/upload"]) {
+for (const path of ["/patients", "/other-uploads", "/upload", "/admin"]) {
   const response = await fetch(base + path, { redirect: "manual" });
   assert.equal(response.status, 307);
   assert.equal(new URL(response.headers.get("location"), base).pathname, "/signin");

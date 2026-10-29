@@ -1,0 +1,8 @@
+import type { Metadata } from "next";
+import { Brand } from "@/components/brand";
+import { SharedMedia,SharePin } from "@/components/portal/share";
+import { findShare,pinUnlocked,shareData } from "@/lib/portal/shares";
+import { validToken } from "@/lib/portal/security";
+export const dynamic="force-dynamic";
+export async function generateMetadata({params}:{params:Promise<{token:string}>}):Promise<Metadata>{const {token}=await params;const image=new URL(`/share-image${validToken(token)?`?token=${token}`:""}`,process.env.APP_URL).href;return {title:{absolute:"Private before and after | Dr. Sands"},description:"A private, expiring media page from Dr. Sands, Beverly Hills.",robots:{index:false,follow:false,noarchive:true},openGraph:{title:"Before and after · Dr. Sands",description:"Private media · Cosmetic Dentistry, Beverly Hills",images:[{url:image,width:1200,height:630}],type:"website"},twitter:{card:"summary_large_image",title:"Before and after · Dr. Sands",images:[image]}};}
+export default async function SharePage({params}:{params:Promise<{token:string}>}){const {token}=await params;let content;try{const link=await findShare(token);content=!link?<section className="shared-card"><h1>This link has expired.</h1><p>Please ask the sender for a new private link.</p></section>:!await pinUnlocked(link)?<SharePin token={token}/>:<SharedMedia initial={await shareData(token)} token={token}/>;}catch{content=<section className="shared-card"><h1>This page is temporarily unavailable.</h1><p>Please try again shortly.</p></section>;}return <main className="share-page"><header className="share-brand"><Brand/></header>{content}</main>;}

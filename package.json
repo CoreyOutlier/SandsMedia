@@ -21,6 +21,8 @@
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@vercel/og": "1.0.3",
+    "archiver": "8.0.0",
     "bcryptjs": "3.0.3",
     "browser-image-compression": "2.0.2",
     "googleapis": "188.0.0",
@@ -39,5 +41,8 @@
     "prisma": "7.10.1",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "fflate": "0.7.5"
   }
 }

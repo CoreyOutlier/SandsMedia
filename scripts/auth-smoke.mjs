@@ -17,7 +17,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   assert.ok(ready, "Isolated test server must start");
-  for (const route of ["/patients", "/other-uploads", "/upload"]) {
+  for (const route of ["/patients", "/other-uploads", "/upload", "/admin"]) {
     for (const identity of [
       { email: "allowed@example.test", verifiedGoogle: true, expected: 200 },
       { email: "removed@example.test", verifiedGoogle: true, expected: 307 },
@@ -28,7 +28,7 @@ try {
       assert.equal(response.status, identity.expected);
       if (identity.expected === 200) {
         const html = await response.text();
-        assert.ok(html.includes(route === "/patients" ? "Patient directory" : route === "/upload" ? "Consent to share" : "Your uploads"));
+        assert.ok(html.includes(route === "/patients" ? "Search name, ID or treatment" : route === "/upload" ? "Consent to share" : route === "/admin" ? "Clinic settings" : "Search title or notes"));
         assert.ok(html.includes("Sign out"));
         if(route==="/upload"){
           for(const text of ["Treatment","Uploaded by","Save to Drive","Choose several together"])assert.ok(html.includes(text));

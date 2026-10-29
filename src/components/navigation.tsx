@@ -9,6 +9,7 @@ export function Navigation() {
     { href: "/upload", label: "Upload", icon: "upload" as const },
     { href: "/patients", label: "Patients", icon: "patients" as const },
     { href: "/other-uploads", label: "Other uploads", icon: "media" as const },
+    { href: "/admin", label: "Settings", icon: "lock" as const },
   ].map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined}>
     <Icon name={item.icon}/><span>{item.label}</span>
   </Link>)}</nav>;

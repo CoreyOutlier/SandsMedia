@@ -32,11 +32,11 @@ export async function prepareFile(input:File,index:number,maxVideoMB:number):Pro
 }
 export async function api<T>(path:string,body?:unknown):Promise<T> {
   let response:Response;
-  try {response=await fetch(path,{method:body===undefined?"GET":"POST",headers:body===undefined?undefined:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store"});}
+  try {response=await fetch(path,{method:body===undefined?"GET":"POST",headers:body===undefined?undefined:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",signal:AbortSignal.timeout(75000)});}
   catch {throw new Error("Connection lost. Keep this page open and tap Resume upload when you are online.");}
-  const data=await response.json();
+  let data;try{data=await response.json();}catch{throw new Error("The server took too long to respond. Tap Resume upload; saved files will not be duplicated.");}
   if(!response.ok) {
-    const messages:Record<string,string>={SIGN_IN_REQUIRED:"Your sign-in expired. Sign in again to continue.",UPLOAD_SETUP_REQUIRED:"Storage is not connected yet. Your files have not been uploaded.",CONSENT_WITHDRAWN:"This patient’s consent has been withdrawn. Contact the clinic before adding media.",UPLOAD_NOT_FOUND:"This upload is unavailable for your account.",UPLOAD_INCOMPLETE:"Some files are not finished. Resume the upload to complete them.",DRIVE_UNAVAILABLE:"Drive could not be reached. Please try again.",PASSCODE_INCORRECT:"That passcode is incorrect.",TOO_MANY_ATTEMPTS:"Too many attempts. Try again in 15 minutes.",FILE_TOO_LARGE:"One of the files exceeds the upload limit.",INVALID_FIELDS:"Please check the information you entered.",REQUIRED_FIELDS:"Please complete the required fields.",CONSENT_FILE_CONFLICT:"The consent record needs review. Contact your portal administrator."};
+    const messages:Record<string,string>={UPLOAD_UNAVAILABLE:"The server could not complete this step. Tap Resume upload to retry safely.",FILE_NOT_CONFIRMED:"Drive is still processing this file. Wait a moment, then tap Resume upload.",SIGN_IN_REQUIRED:"Your sign-in expired. Sign in again to continue.",UPLOAD_SETUP_REQUIRED:"Storage is not connected yet. Your files have not been uploaded.",CONSENT_WITHDRAWN:"This patient’s consent has been withdrawn. Contact the clinic before adding media.",UPLOAD_NOT_FOUND:"This upload is unavailable for your account.",UPLOAD_INCOMPLETE:"Some files are not finished. Resume the upload to complete them.",DRIVE_UNAVAILABLE:"Drive could not be reached. Please try again.",PASSCODE_INCORRECT:"That passcode is incorrect.",TOO_MANY_ATTEMPTS:"Too many attempts. Try again in 15 minutes.",FILE_TOO_LARGE:"One of the files exceeds the upload limit.",INVALID_FIELDS:"Please check the information you entered.",REQUIRED_FIELDS:"Please complete the required fields.",CONSENT_FILE_CONFLICT:"The consent record needs review. Contact your portal administrator."};
     throw new Error(messages[data.error]??"The upload could not be completed. Your confirmed files are safe; try again.");
   }
   return data;
@@ -44,7 +44,7 @@ export async function api<T>(path:string,body?:unknown):Promise<T> {
 export async function transfer(file:File,url:string,progress:(value:number)=>void,signal:AbortSignal) {
   let offset=0;let failures=0;
   const query=async()=>{
-    const r=await fetch(url,{method:"PUT",headers:{"Content-Range":`bytes */${file.size}`},body:new Blob([]),signal});
+    const r=await fetch(url,{method:"PUT",headers:{"Content-Range":`bytes */${file.size}`},body:new Blob([]),signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
     if(r.status===200||r.status===201)return {done:true,offset:file.size};
     if(r.status===404||r.status===410)throw new Error("SESSION_EXPIRED");
     if(r.status!==308)throw new Error("RETRY");
@@ -55,7 +55,7 @@ export async function transfer(file:File,url:string,progress:(value:number)=>voi
       const status=await query();offset=status.offset;if(status.done){progress(100);return;}
       while(offset<file.size) {
         const end=Math.min(offset+8*1024*1024,file.size);
-        const response=await fetch(url,{method:"PUT",headers:{"Content-Type":file.type||"application/octet-stream","Content-Range":`bytes ${offset}-${end-1}/${file.size}`},body:file.slice(offset,end),signal});
+        const response=await fetch(url,{method:"PUT",headers:{"Content-Type":file.type||"application/octet-stream","Content-Range":`bytes ${offset}-${end-1}/${file.size}`},body:file.slice(offset,end),signal:AbortSignal.any([signal,AbortSignal.timeout(120000)])});
         if(response.status===200||response.status===201){progress(100);return;}
         if(response.status===404||response.status===410)throw new Error("SESSION_EXPIRED");
         if(response.status!==308)throw new Error("RETRY");
