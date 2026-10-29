@@ -40,7 +40,7 @@ test("server validates image dimensions, MIME and video size/duration independen
   rejects({...batch(),files:[{...photo(),width:3000}]},"INVALID_DIMENSIONS");
   rejects({...batch(),files:[{...photo(),mimeType:"text/html"}]},"UNSUPPORTED_FILE");
   rejects({...batch(),files:[{...video(),bytes:501*1024*1024}]},"FILE_TOO_LARGE");
-  rejects({...batch(),files:[{...video(),durationS:181}]},"VIDEO_TOO_LONG");
+  rejects({...batch(),files:[{...video(),durationS:7200.001}]},"VIDEO_TOO_LONG");
   rejects({...batch(),files:[{...video(),durationS:NaN}]},"VIDEO_TOO_LONG");
   assert.throws(()=>validateStart(batch(),NaN),/UPLOAD_SETUP_REQUIRED/);
 });

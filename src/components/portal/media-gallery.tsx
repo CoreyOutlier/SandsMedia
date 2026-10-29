@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { portalApi, type MediaItem } from "./types";
+import { fileSize, mediaDuration } from "@/lib/media-format";
 
 function DownloadIcon() {
  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4" /></svg>;
 }
 const mediaName = (item: MediaItem) => item.title || `${item.label.charAt(0).toUpperCase()}${item.label.slice(1)} ${item.kind}`;
-const fileSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 function MediaCard({ item, onOpen, editable, general, onRenamed }: { item: MediaItem; onOpen: () => void; editable: boolean; general: boolean; onRenamed?: (id: string, title: string | null) => void }) {
  const [editing, setEditing] = useState(false);
@@ -32,7 +32,7 @@ function MediaCard({ item, onOpen, editable, general, onRenamed }: { item: Media
    {item.kind === "video" && <span className="video-play" aria-hidden="true">▶</span>}
   </button>
   <div className="media-card-body">
-   <div className="media-card-caption"><strong>{mediaName(item)}</strong><span>{fileSize(item.bytes)}{item.kind === "video" && item.durationS ? ` · ${Math.floor(item.durationS / 60)}:${String(Math.round(item.durationS % 60)).padStart(2, "0")}` : ""}</span></div>
+   <div className="media-card-caption"><strong>{mediaName(item)}</strong><span>{fileSize(item.bytes)}{item.kind === "video" && item.durationS ? ` · ${mediaDuration(item.durationS)}` : ""}</span></div>
    <div className="media-card-actions"><a className="media-download" href={item.download} download><DownloadIcon /><span>Download {item.kind}</span></a>{editable && item.kind === "video" && <button className="media-name-action" onClick={() => { setEditing(!editing); setTitle(item.title ?? ""); setError(""); setSaved(false); }} aria-expanded={editing} aria-label={`${item.title ? "Edit" : "Add"} video title`}>{item.title ? "Edit title" : "Name video"}</button>}</div>
    {editing && <form className="media-title-editor" onSubmit={e => { e.preventDefault(); void saveTitle(); }}><label htmlFor={`title-${item.id}`}>Video title</label><input id={`title-${item.id}`} value={title} onChange={e => setTitle(e.target.value)} maxLength={120} disabled={busy} autoFocus placeholder="e.g. Smile reveal" required /><div className="media-title-actions"><button className="button primary" disabled={busy || !title.trim()}>{busy ? "Saving…" : "Save title"}</button><button className="button quiet" type="button" onClick={() => setEditing(false)} disabled={busy}>Cancel</button></div>{error && <p className="upload-error" role="alert">{error}</p>}</form>}
    {saved && <p className="media-saved" role="status">Video title saved.</p>}

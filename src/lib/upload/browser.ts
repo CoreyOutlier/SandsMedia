@@ -1,11 +1,13 @@
 import imageCompression from "browser-image-compression";
 import type { FilePlan, Label } from "./validation";
 import { UploadRequestError } from "./recovery.ts";
+import { validVideoDuration } from "./limits.ts";
+import { fileSize } from "../media-format.ts";
 export type PickedFile={plan:Omit<FilePlan,"label"> & {label:Label|""};file:File;preview:string;progress:number};
 export async function prepareFile(input:File,maxVideoMB:number):Promise<PickedFile> {
   const video=input.type.startsWith("video/");
   if(!video && !input.type.startsWith("image/"))throw new Error("Choose a photo or video.");
-  if(video && input.size>maxVideoMB*1024*1024)throw new Error(`Each video must be ${maxVideoMB} MB or smaller.`);
+  if(video && input.size>maxVideoMB*1024*1024)throw new Error(`Each video must be ${fileSize(maxVideoMB*1024*1024)} or smaller.`);
   if(video && !["video/mp4","video/quicktime","video/webm","video/x-m4v"].includes(input.type))throw new Error("This video format is not supported. Choose an MP4, MOV, or WebM video.");
   let file=input;
   if(!video) {
@@ -22,7 +24,7 @@ export async function prepareFile(input:File,maxVideoMB:number):Promise<PickedFi
       else element.onload=()=>{clearTimeout(timer);resolve({width:element.naturalWidth,height:element.naturalHeight,durationS:null});};
       element.src=preview;
     });
-    if(video && (!dimensions.durationS || !Number.isFinite(dimensions.durationS)||dimensions.durationS>180))throw new Error("Each video must be three minutes or shorter.");
+    if(video && !validVideoDuration(dimensions.durationS))throw new Error("Choose a readable video up to 2 hours long.");
   }catch(e){URL.revokeObjectURL(preview);throw e;}
   // A bounded fingerprint matches reselected files to a saved manifest after a
   // page restart. It is not presented as a cryptographic content checksum.
@@ -37,40 +39,61 @@ export async function api<T>(path:string,body?:unknown):Promise<T> {
   catch {throw new UploadRequestError("Connection lost. Keep this page open and tap Resume upload when you are online.","NETWORK_ERROR",0);}
   let data;try{data=await response.json();}catch{throw new UploadRequestError("The server took too long to respond. Tap Resume upload; saved files will not be duplicated.","INVALID_RESPONSE",response.status);}
   if(!response.ok) {
-    const messages:Record<string,string>={UPLOAD_UNAVAILABLE:"The server could not complete this step. Tap Resume upload to retry safely.",FILE_NOT_CONFIRMED:"Drive is still processing this file. Wait a moment, then tap Resume upload.",SIGN_IN_REQUIRED:"Your sign-in expired. Sign in again to continue.",UPLOAD_SETUP_REQUIRED:"Storage is not connected yet. Your files have not been uploaded.",PATIENT_ARCHIVED:"This patient is archived. Restore the patient from the library before adding or resuming uploads.",INVALID_MEDIA_TITLE:"Video titles must be 120 characters or fewer.",UPLOAD_NOT_FOUND:"This saved upload could not be recovered. It may not have started, or it may belong to a different sign-in.",UPLOAD_INCOMPLETE:"Some files are not finished. Resume the upload to complete them.",DRIVE_UNAVAILABLE:"Drive could not be reached. Please try again.",PASSCODE_INCORRECT:"That passcode is incorrect.",TOO_MANY_ATTEMPTS:"Too many attempts. Try again in 15 minutes.",FILE_TOO_LARGE:"One of the files exceeds the upload limit.",INVALID_FIELDS:"Please check the information you entered.",REQUIRED_FIELDS:"Please complete the required fields.",CONSENT_FILE_CONFLICT:"The consent record needs review. Contact your portal administrator."};
+    const messages:Record<string,string>={UPLOAD_UNAVAILABLE:"The server could not complete this step. Tap Resume upload to retry safely.",FILE_NOT_CONFIRMED:"Drive is still processing this file. Wait a moment, then tap Resume upload.",SIGN_IN_REQUIRED:"Your sign-in expired. Sign in again to continue.",UPLOAD_SETUP_REQUIRED:"Storage is not connected yet. Your files have not been uploaded.",PATIENT_ARCHIVED:"This patient is archived. Restore the patient from the library before adding or resuming uploads.",INVALID_MEDIA_TITLE:"Video titles must be 120 characters or fewer.",UPLOAD_NOT_FOUND:"This saved upload could not be recovered. It may not have started, or it may belong to a different sign-in.",UPLOAD_INCOMPLETE:"Some files are not finished. Resume the upload to complete them.",DRIVE_UNAVAILABLE:"Drive could not be reached. Please try again.",PASSCODE_INCORRECT:"That passcode is incorrect.",TOO_MANY_ATTEMPTS:"Too many attempts. Try again in 15 minutes.",FILE_TOO_LARGE:"One of the files exceeds the upload limit.",VIDEO_TOO_LONG:"Choose a readable video up to 2 hours long.",INVALID_FIELDS:"Please check the information you entered.",REQUIRED_FIELDS:"Please complete the required fields.",CONSENT_FILE_CONFLICT:"The consent record needs review. Contact your portal administrator."};
     const code=typeof data?.error==="string"&&/^[A-Z_]{1,80}$/.test(data.error)?data.error:"UNKNOWN";
     throw new UploadRequestError(messages[code]??"The upload could not be completed. Your confirmed files are safe; try again.",code,response.status);
   }
   return data;
 }
 export async function transfer(file:File,url:string,progress:(value:number)=>void,signal:AbortSignal) {
+  if(!Number.isSafeInteger(file.size)||file.size<1)throw new Error("This file is empty or cannot be uploaded.");
   let offset=0;let failures=0;
+  const paused=()=>new Error("Upload paused. Tap Resume upload to continue.");
+  // Drive acknowledges a contiguous prefix. Never truncate offsets to 32 bits,
+  // trust malformed ranges, or treat an incomplete response as completion.
+  const acknowledgedOffset=(response:Response,allowEmpty:boolean)=>{
+    const value=response.headers.get("Range");
+    if(value===null && allowEmpty)return 0;
+    const match=/^bytes=0-(\d+)$/.exec(value?.trim()??"");
+    const last=match?Number(match[1]):NaN;const next=last+1;
+    if(!Number.isSafeInteger(last)||!Number.isSafeInteger(next)||last<0||next>=file.size)throw new Error("RETRY");
+    return next;
+  };
   const query=async()=>{
     const r=await fetch(url,{method:"PUT",headers:{"Content-Range":`bytes */${file.size}`},body:new Blob([]),signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
     if(r.status===200||r.status===201)return {done:true,offset:file.size};
     if(r.status===404||r.status===410)throw new Error("SESSION_EXPIRED");
     if(r.status!==308)throw new Error("RETRY");
-    const range=r.headers.get("Range");return {done:false,offset:range?Number(range.split("-")[1])+1:0};
+    return {done:false,offset:acknowledgedOffset(r,true)};
   };
+  const backoff=(delay:number)=>new Promise<void>((resolve,reject)=>{
+    const finish=()=>{signal.removeEventListener("abort",cancel);resolve();};
+    const cancel=()=>{clearTimeout(timer);signal.removeEventListener("abort",cancel);reject(paused());};
+    const timer=setTimeout(finish,delay);signal.addEventListener("abort",cancel,{once:true});
+    if(signal.aborted)cancel();
+  });
   while(!signal.aborted) {
     try {
-      const status=await query();offset=status.offset;if(status.done){progress(100);return;}
+      const status=await query();if(signal.aborted)throw paused();
+      offset=status.offset;if(status.done){progress(100);return;}
+      progress(Math.min(99,Math.floor(offset/file.size*100)));
       while(offset<file.size) {
         const end=Math.min(offset+8*1024*1024,file.size);
         const response=await fetch(url,{method:"PUT",headers:{"Content-Type":file.type||"application/octet-stream","Content-Range":`bytes ${offset}-${end-1}/${file.size}`},body:file.slice(offset,end),signal:AbortSignal.any([signal,AbortSignal.timeout(120000)])});
+        if(signal.aborted)throw paused();
         if(response.status===200||response.status===201){progress(100);return;}
         if(response.status===404||response.status===410)throw new Error("SESSION_EXPIRED");
         if(response.status!==308)throw new Error("RETRY");
-        const range=response.headers.get("Range");const next=range?Number(range.split("-")[1])+1:0;
-        if(!Number.isSafeInteger(next)||next<=offset||next>file.size)throw new Error("RETRY");
-        offset=next;failures=0;progress(Math.floor(offset/file.size*100));
+        const next=acknowledgedOffset(response,false);
+        if(next<=offset||next>end)throw new Error("RETRY");
+        offset=next;failures=0;progress(Math.min(99,Math.floor(offset/file.size*100)));
       }
     }catch(e) {
-      if(signal.aborted)throw new Error("Upload paused. Tap Resume upload to continue.");
+      if(signal.aborted)throw paused();
       if((e as Error).message==="SESSION_EXPIRED")throw e;
       if(++failures>5)throw new Error("Connection interrupted. Keep this page open and tap Resume upload to continue.");
-      await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**failures,10000)));
+      await backoff(Math.min(1000*2**failures,10000));
     }
   }
-  throw new Error("Upload paused. Tap Resume upload to continue.");
+  throw paused();
 }

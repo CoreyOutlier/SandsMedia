@@ -1,3 +1,4 @@
+import { MAX_VIDEO_MB, validVideoDuration } from "./limits.ts";
 export class UploadError extends Error {
   code: string;
   status: number;
@@ -27,7 +28,7 @@ export function namedVideoFile(existingName: string, title: string | null): stri
   return `${match[1]}-${match[2]}${title ? ` - ${title}` : ""}.${match[3]}`;
 }
 export function validateStart(value: unknown, maxVideoMB: number) {
-  if(!Number.isFinite(maxVideoMB)||maxVideoMB<=0||maxVideoMB>500) throw new UploadError("UPLOAD_SETUP_REQUIRED",503);
+  if(!Number.isFinite(maxVideoMB)||maxVideoMB<=0||maxVideoMB>MAX_VIDEO_MB) throw new UploadError("UPLOAD_SETUP_REQUIRED",503);
   const x = value as Record<string, unknown>;
   if (!x || !uuid(x.uploadId) || !["patient", "general"].includes(String(x.kind))) throw new UploadError("INVALID_UPLOAD");
   const date = textField(x.date, 10);
@@ -52,7 +53,7 @@ export function validateStart(value: unknown, maxVideoMB: number) {
     if (!ext) throw new UploadError("UNSUPPORTED_FILE");
     if (!Number.isSafeInteger(f.bytes) || Number(f.bytes) < 1 || Number(f.bytes) > (kind === "photo" ? 20 : maxVideoMB) * 1024 * 1024) throw new UploadError("FILE_TOO_LARGE");
     if (![f.width,f.height].every(n => Number.isSafeInteger(n) && Number(n)>0 && Number(n)<=32768) || (kind === "photo" && Math.max(Number(f.width),Number(f.height))>2048)) throw new UploadError("INVALID_DIMENSIONS");
-    if (kind === "video" && (typeof f.durationS !== "number" || !Number.isFinite(f.durationS) || f.durationS <= 0 || f.durationS>180)) throw new UploadError("VIDEO_TOO_LONG");
+    if (kind === "video" && !validVideoDuration(f.durationS)) throw new UploadError("VIDEO_TOO_LONG");
     const label = general ? "other" : f.label;
     if (!labels.includes(label as Label)) throw new UploadError("INVALID_LABEL");
     const counterKey = `${kind}:${label}`; counters[counterKey]=(counters[counterKey]??0)+1;

@@ -6,6 +6,7 @@ import { FilePlan, UploadError, folderName, patientFolderName, validateStart } f
 import { seal, unseal } from "./security";
 import { uploadIdentity } from "./http";
 import { isIP } from "node:net";
+import { MAX_VIDEO_MB, validVideoDuration } from "./limits";
 type Identity=Awaited<ReturnType<typeof uploadIdentity>>;
 type Tx=Prisma.TransactionClient;
 const include={session:{include:{patient:true}},generalUpload:true} as const;
@@ -32,7 +33,7 @@ function payload(batch:Awaited<ReturnType<typeof ownedBatch>>) {
 }
 export async function getBatch(id:string,identity:Identity) { return payload(await ownedBatch(database(),id,identity)); }
 export async function startBatch(raw:unknown,identity:Identity) {
-  const data=validateStart(raw,Number(process.env.MAX_VIDEO_MB??500));
+  const data=validateStart(raw,Number(process.env.MAX_VIDEO_MB??MAX_VIDEO_MB));
   if(!validateConsentVersion(process.env.CONSENT_TEXT_VERSION)) throw new UploadError("UPLOAD_SETUP_REQUIRED",503);
   return database().$transaction(async tx=>{
     await lock(tx,`start:${identity.clinic.id}`);
@@ -106,7 +107,7 @@ export async function confirmFile(id:string,key:string,identity:Identity) {
     if(!actual || actual.trashed || !actual.parents?.includes(expectedParent??"") || actual.appProperties?.postingCenterKey!==`file:${id}:${key}` || actual.mimeType!==file.mimeType || actual.name!==file.name || Number(actual.size)!==file.bytes) throw new UploadError("FILE_NOT_CONFIRMED",409);
     const image=actual.imageMediaMetadata;
     if(file.kind==="photo" && (!image?.width || !image.height || Math.max(image.width,image.height)>2048)) throw new UploadError("FILE_NOT_CONFIRMED",409);
-    const meta=actual.videoMediaMetadata; if(file.kind==="video" && meta?.durationMillis && Number(meta.durationMillis)>180000) throw new UploadError("VIDEO_TOO_LONG");
+    const meta=actual.videoMediaMetadata; if(file.kind==="video" && meta?.durationMillis!=null && !validVideoDuration(Number(meta.durationMillis)/1000)) throw new UploadError("VIDEO_TOO_LONG");
     const common={driveFileId:file.driveId,fileName:file.name,title:file.title??null,kind:file.kind,position:files.indexOf(file),bytes:BigInt(file.bytes),width:file.width,height:file.height,durationS:file.durationS};
     if(batch.sessionId) await tx.media.create({data:{...common,sessionId:batch.sessionId,label:file.label}});
     else await tx.generalMedia.create({data:{...common,generalUploadId:batch.generalUploadId!}});

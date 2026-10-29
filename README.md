@@ -8,6 +8,44 @@ The temporary test origin is https://sandsmedia-platform.vercel.app.
 The specification is [docs/BRIEF.md](docs/BRIEF.md). The
 [prototype](docs/prototype.html) is reference material, never served or embedded.
 
+## Larger and longer video uploads — 29 October 2026
+
+The owner selected **5 GB per video and up to two hours**, for both patient and
+Other uploads. This supersedes the original 500 MB / three-minute cap. Set
+`MAX_VIDEO_MB=5120`; browser preparation, server validation and Drive metadata
+confirmation share the duration policy in `src/lib/upload/limits.ts`. Byte limits
+use 1,024-based units. No dependencies, schema migration or new secrets are needed.
+
+Videos remain unchanged, uploaded directly to private Drive in 8 MiB chunks.
+Resume validates Drive's acknowledged range, works beyond the 4 GiB boundary,
+shows recovered progress immediately, and stops malformed responses after bounded
+retries. Pausing also interrupts retry waits. Only Drive's completed response
+reports 100%. File sizes display in GB and long durations use hours:minutes:seconds.
+
+Verification includes exact 5 GiB / 7,200-second boundaries, one byte / fractional
+second over-limit rejection, invalid metadata, and virtual-file resume tests
+beyond 4 GiB without a multi-gigabyte memory allocation. The isolated integration
+uses actual 242-second and two-hour MP4s padded to cross an 8 MiB chunk boundary,
+checks interrupted/resumed Drive uploads, and finishes them idempotently. It does
+not transfer a full 5 GiB file. Real phone/background behavior still depends on
+the browser remaining open; keep the page open during long transfers.
+
+To reproduce on macOS (AVFoundation, no extra dependency), generate ignored
+fixtures with `swift -module-cache-path /tmp/posting-center-swift-cache
+scripts/make-long-video.swift qa/upload-fixtures/synthetic-242s.mp4 242` and
+repeat with `synthetic-7200s.mp4 7200`. Existing fixture files are reused. Run the
+local production build on port 3102 with `.env.upload-test` and
+`MAX_VIDEO_MB=5120`, then run
+`MAX_VIDEO_MB=5120 node --env-file=.env.upload-test scripts/test-long-video.mjs`.
+The script refuses production origins/databases. Drive may take several minutes
+to expose a long video's preview metadata; saving does not wait for transcoding.
+
+Download limitation: portal original/ZIP downloads still stream through a
+300-second route. A multi-GB download on a slow connection may exceed that limit;
+users with permission to the private Shared Drive can use Open in Drive to
+retrieve originals there. This upload change does not redesign large-file
+download delivery or make any Drive files public.
+
 ## Library redesign, renewed consent, and patient archive — 29 October 2026
 
 The owner requested simpler filters, visible downloads, individual video titles,
@@ -316,7 +354,7 @@ Auth error logs are fixed codes only. Secrets must never use NEXT_PUBLIC_ names.
 | SHARE_SECRET | Independent random secret for signed media/download capabilities and PIN cookies. Required for sharing. |
 | CRON_SECRET | Optional random bearer secret for the storage reconciliation route. No automatic schedule is currently configured. |
 | SYNTHETIC_TEST_MODE | Defaults true; shows a test-only notice and requires acknowledgement. Set false only after the practice confirms the brief’s patient-data setup. |
-| MAX_VIDEO_MB | Video upload cap; default 500. |
+| MAX_VIDEO_MB | Video upload cap in binary MB; default and maximum 5120 (5 GB). Every video also has a fixed 7,200-second (2-hour) duration limit in `src/lib/upload/limits.ts`. |
 | CONSENT_TEXT_VERSION | Initial value 1; must match the code's consent version. |
 | SEED_DEMO_DATA | Development-only fixture switch; default false. Never set true in Vercel production. |
 | SEED_CLINIC_PASSCODE_HASH | Bcrypt hash for initial clinic provisioning; never the raw passcode. |
