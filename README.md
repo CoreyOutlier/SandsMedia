@@ -38,8 +38,15 @@ Implemented across steps 4–7:
 
 Production upload release 52b3cf3 was verified with an actual photo/video batch.
 This complete-portal update has passed local build/type checks, 20 unit tests,
-authentication checks and the isolated real-Drive integration suite. The new
-production signing secrets and final deployment are pending release verification.
+authentication checks and the isolated real-Drive integration suite. Commit
+`b4f4479` is deployed successfully to production (Vercel deployment
+`Fsh9anuTECUzMDk2pp3tSs7RGYBj`). Production checks verified the new Save feedback,
+protected pages, a generated 9 MiB video uploaded in two resumable chunks, playback,
+and an original download matching the upload byte for byte. SHARE_SECRET and
+CRON_SECRET are generated privately but not yet saved in Vercel: the browser
+credential-save approvals remain unanswered. Sharing is visibly disabled until
+configured, and the nightly endpoint fails closed without its secret. These two
+features are implemented and integration-tested but are not yet activated in production.
 
 Verification: a fresh mixed patient upload, name/treatment searches, both libraries,
 private thumbnails, video ranges and invalid ranges, a stream larger than 8 MiB,
@@ -53,8 +60,8 @@ visible interactive controls met 44 px minimum height; video metadata and scrubb
 loaded successfully in that layout.
 
 All fixtures are isolated in sandsmedia_upload_test and a clearly labeled test
-Drive folder. No synthetic patient rows are inserted into production. The single
-production general-upload verification batch contains only generated test media.
+Drive folder. No synthetic patient rows are inserted into production. The two
+production general-upload verification batches contain only generated test media.
 Real iPhone cellular timing, the 150 MB airplane-mode test, and actual iMessage
 preview delivery remain manual device acceptance checks; desktop/emulated tests
 must not be represented as those checks.
