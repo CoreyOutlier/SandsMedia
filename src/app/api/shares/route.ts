@@ -14,7 +14,7 @@ export async function POST(request:Request){try{
  const token=newToken();const pinHash=b.pin?await hash(b.pin,12):null;
  await database().$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${b.patientId}`}))`;
-   const p=await tx.patient.findFirst({where:{id:b.patientId,clinicId:clinic.id},include:patientInclude});
+   const p=await tx.patient.findFirst({where:{id:b.patientId,clinicId:clinic.id,deletedAt:null},include:patientInclude});
    if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);if(clearance(p).status!=="cleared")throw new UploadError("CONSENT_REQUIRED",409);
    await tx.shareLink.create({data:{patientId:p.id,tokenHash:hashToken(token),pinHash,createdBy:email,expiresAt:new Date(Date.now()+(b.days??7)*86400000)}});
  });return uploadResponse({url:new URL(`/s/${token}`,process.env.APP_URL).href,days:b.days??7});

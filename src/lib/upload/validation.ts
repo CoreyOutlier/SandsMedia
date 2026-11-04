@@ -6,7 +6,7 @@ export class UploadError extends Error {
 }
 export const labels = ["before", "after", "testimonial", "other"] as const;
 export type Label = typeof labels[number];
-export type FilePlan = { key: string; fingerprint: string; kind: "photo" | "video"; label: Label; mimeType: string; bytes: number; width: number; height: number; durationS: number | null; name: string; title?: string | null; driveId?: string; encryptedUrl?: string; confirmed?: boolean };
+export type FilePlan = { key: string; fingerprint: string; kind: "photo" | "video"; label: Label; mimeType: string; bytes: number; width: number; height: number; durationS: number | null; name: string; title?: string | null; driveId?: string; encryptedUrl?: string; confirmed?: boolean; deletedAt?: string };
 export const uuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 export function textField(v: unknown, max: number, required = true, multiline = false): string {
   if (typeof v !== "string" || v.length > max || /[\u0000-\u001f\u007f]/.test(multiline?v.replace(/\n/g, ""):v)) throw new UploadError("INVALID_FIELDS");

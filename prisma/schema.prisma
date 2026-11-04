@@ -53,6 +53,8 @@ model Patient {
   consentWithdrawnAt DateTime?   @map("consent_withdrawn_at") @db.Timestamptz(3)
   lifecycleVersion   Int         @default(0) @map("lifecycle_version")
   archivedAt         DateTime?   @map("archived_at") @db.Timestamptz(3)
+  deletedAt          DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  driveTrashedAt     DateTime?   @map("drive_trashed_at") @db.Timestamptz(3)
   // Shared internal library markers; neither grants social clearance.
   isFavorite         Boolean     @default(false) @map("is_favorite")
   isCelebrity        Boolean     @default(false) @map("is_celebrity")
@@ -64,6 +66,7 @@ model Patient {
 
   // Clearance is derived, never a mutable column.
   @@index([clinicId, archivedAt])
+  @@index([clinicId, deletedAt, driveTrashedAt])
   @@index([clinicId, isFavorite, archivedAt])
   @@index([clinicId, isCelebrity, archivedAt])
   @@unique([clinicId, displayId])
@@ -113,12 +116,15 @@ model Media {
   height      Int?
   durationS   Float?     @map("duration_s")
   bytes       BigInt
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  driveTrashedAt DateTime? @map("drive_trashed_at") @db.Timestamptz(3)
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   session     Session    @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([sessionId, position])
   @@unique([sessionId, fileName])
   @@index([sessionId, kind])
+  @@index([deletedAt, driveTrashedAt])
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("media")
 }
@@ -212,12 +218,15 @@ model GeneralMedia {
   height          Int?
   durationS       Float?        @map("duration_s")
   bytes           BigInt
+  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  driveTrashedAt  DateTime?     @map("drive_trashed_at") @db.Timestamptz(3)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   generalUpload   GeneralUpload @relation(fields: [generalUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([generalUploadId, position])
   @@unique([generalUploadId, fileName])
   @@index([generalUploadId, kind])
+  @@index([deletedAt, driveTrashedAt])
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("general_media")
 }

@@ -13,7 +13,7 @@ export async function patientAction(id:string,identity:Identity,body:Record<stri
  if(body.action==="renew_consent")return renewConsent(id,identity,body,request);
  await database().$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${id}`}))`;
-  const p=await tx.patient.findFirst({where:{id,clinicId:identity.clinic.id}});
+  const p=await tx.patient.findFirst({where:{id,clinicId:identity.clinic.id,deletedAt:null}});
   if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);
   let action:string|null=null;
   if(body.action==="favorite"||body.action==="celebrity"){
@@ -44,14 +44,14 @@ async function renewConsent(id:string,identity:Identity,body:Record<string,unkno
  // reaches Drive; retries reuse the same operation and the same consent events.
  const prepared=await database().$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${id}`}))`;
-  const p=await tx.patient.findFirst({where:{id,clinicId:identity.clinic.id},include:{sessions:{where:{finishedAt:{not:null}}}}});
+  const p=await tx.patient.findFirst({where:{id,clinicId:identity.clinic.id,deletedAt:null},include:{sessions:{where:{finishedAt:{not:null}}}}});
   if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);
   const old=await tx.patientActivity.findUnique({where:{id:operationId}});
   if(old){
    if(old.patientId!==id||old.action!=="renewal_recorded")throw new UploadError("INVALID_FIELDS");
    const completed=await tx.patientActivity.findUnique({where:{operationId_action:{operationId,action:"consent_renewed"}}});
    if(completed){
-    if(p.archivedAt||p.consentWithdrawnAt||p.lifecycleVersion!==completed.patientVersion)throw new UploadError("CONSENT_RENEWAL_STALE",409);
+    if(p.deletedAt||p.archivedAt||p.consentWithdrawnAt||p.lifecycleVersion!==completed.patientVersion)throw new UploadError("CONSENT_RENEWAL_STALE",409);
     return {done:true,version:old.patientVersion};
    }
    if(!canCompleteRenewal(p,old.patientVersion))throw new UploadError("CONSENT_RENEWAL_STALE",409);
@@ -73,12 +73,20 @@ async function renewConsent(id:string,identity:Identity,body:Record<string,unkno
  const events=await database().consentEvent.findMany({where:{renewalId:operationId},include:{session:{select:{id:true,date:true,driveFolderId:true}}},orderBy:{id:"asc"}});
  for(let offset=0;offset<events.length;offset+=4){
   await Promise.all(events.slice(offset,offset+4).map(e=>database().$transaction(async tx=>{
+   // Deletion takes the same patient lock. No consent copy may recreate a
+   // file inside a patient folder after that patient has been removed.
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${id}`}))`;
+   const current=await tx.patient.findUniqueOrThrow({where:{id}});
+   if(!canCompleteRenewal(current,prepared.version))throw new UploadError("CONSENT_RENEWAL_STALE",409);
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`consent-file:${e.id}`}))`;
    await writeConsentFile(e.session.driveFolderId!,e.id,{eventId:e.id,renewalId:operationId,patientId:patient.displayId,sessionDate:e.session.date.toISOString().slice(0,10),consentText:e.consentText,consentTextVersion:e.consentTextVersion,consentedBy:e.consentedBy,formOnFile:e.formOnFile,timestamp:e.createdAt.toISOString(),ip:e.ip,userAgent:e.userAgent},true);
   },{maxWait:10000,timeout:60000})));
  }
  // The shared clinic CSV uses the same lock as initial-upload consent mirrors.
  await database().$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${id}`}))`;
+  const current=await tx.patient.findUniqueOrThrow({where:{id}});
+  if(!canCompleteRenewal(current,prepared.version))throw new UploadError("CONSENT_RENEWAL_STALE",409);
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`consent-mirror:${identity.clinic.id}`}))`;
   await appendConsentMirrors(identity.clinic.driveRootFolderId,events.map(e=>({eventId:e.id,values:[patient.displayId,e.session.date.toISOString().slice(0,10),String(e.consentTextVersion),e.consentText,e.consentedBy,String(e.formOnFile),e.createdAt.toISOString(),e.ip,e.userAgent]})));
  },{maxWait:10000,timeout:60000});
@@ -87,7 +95,7 @@ async function renewConsent(id:string,identity:Identity,body:Record<string,unkno
   const p=await tx.patient.findUniqueOrThrow({where:{id}});
   const completed=await tx.patientActivity.findUnique({where:{operationId_action:{operationId,action:"consent_renewed"}}});
   if(completed){
-   if(p.archivedAt||p.consentWithdrawnAt||p.lifecycleVersion!==completed.patientVersion)throw new UploadError("CONSENT_RENEWAL_STALE",409);
+   if(p.deletedAt||p.archivedAt||p.consentWithdrawnAt||p.lifecycleVersion!==completed.patientVersion)throw new UploadError("CONSENT_RENEWAL_STALE",409);
    return;
   }
   if(!canCompleteRenewal(p,prepared.version))throw new UploadError("CONSENT_RENEWAL_STALE",409);

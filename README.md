@@ -8,6 +8,67 @@ The temporary test origin is https://sandsmedia-platform.vercel.app.
 The specification is [docs/BRIEF.md](docs/BRIEF.md). The
 [prototype](docs/prototype.html) is reference material, never served or embedded.
 
+## Delete media and patients — 4 November 2026
+
+Internal photo/video cards in both libraries have a Delete action with an inline
+confirmation. Patient settings offer Delete patient separately from Archive,
+with a checkbox confirming removal of the patient and all media. Archive retains
+files for later restoration; deletion cannot be undone through the portal.
+
+Deletion removes access in the database first, then moves the specific Drive file
+or patient folder to Trash. It is not an immediate permanent purge from Drive.
+Patient deletion revokes all share links and appends one lifecycle event; individual
+file deletion removes only that file from shared pages. ConsentEvent and existing
+PatientActivity rows are never changed or deleted. Minimal patient/session/media
+records remain as audit and upload-retry anchors, outside every portal listing,
+search, archive view and read endpoint. Already downloaded or externally posted
+copies cannot be recalled by this portal.
+
+The additive migration is
+`prisma/migrations/202611040005_patient_media_deletion/migration.sql`. It adds
+nullable deletion/Drive-cleanup timestamps to Patient, Media and GeneralMedia and
+permits the new append-only `deleted` patient activity. The Prisma additions were
+shown before migration. Run `scripts/deletion-migrate.mjs test|production` with the
+matching owner environment explicitly loaded. It validates the target database,
+clinic root, retained record counts, runtime privileges and immutable audit guards.
+No dependencies, environment variables or additional permissions are required.
+
+Same-origin, allowlisted Google dashboard access and explicit confirmation are
+required. Upload-passcode sessions cannot delete. Deletion is clinic-scoped,
+idempotent and coordinated with upload/rename/renewal locks. Removed upload manifest
+entries cannot be signed, confirmed, resumed or reconciled back into the library.
+Patient deletion also checks reserved Drive IDs for files that finished uploading
+before confirmation. An unfinished upload's reserved ID is consumed by a generic
+zero-byte marker in private Drive Trash, preventing an already-issued resumable
+URL (including a pre-renewal URL) from creating a late file. The marker contains
+no patient information. This uses Drive's [pre-generated ID conflict
+guarantee](https://developers.google.com/workspace/drive/api/guides/manage-uploads#pre-generated-ids);
+the patient folder is trashed only after all reserved IDs are secured. Private
+ZIPs omit removed files even if someone restores them
+in Drive; public URLs check current deletion state before opening media.
+
+Drive operations verify the stored upload identity and ancestry under the configured
+clinic root before trashing an object. See Google's [Drive trash API
+documentation](https://developers.google.com/workspace/drive/api/guides/delete).
+If cleanup fails, access stays removed, the UI offers Retry deletion, and Settings
+→ Check storage retries pending cleanup with completed/pending counts. This uses
+the existing manual storage check; it does not enable an automatic nightly job.
+The test scripts `scripts/deletion-integration.mjs` and
+`scripts/deletion-late-upload-integration.mjs` refuse production origins,
+databases and Drive roots and use disposable synthetic media only. The latter
+checks completed-but-unconfirmed files, an untouched resumable session, and both
+old and renewed sessions after a partial upload.
+
+The migration is applied to test and production; existing record counts and
+append-only consent/history protections were verified. All 59 unit tests,
+Prisma validation, production build, HTTP smoke and authenticated route checks
+passed. Real Drive tests in the isolated environment passed concurrent deletion,
+clinic/access boundaries, stale public/private URLs, ZIP exclusion, pending
+cleanup recovery, and attempts to finish uploads after patient deletion. Desktop
+and 390px mobile checks passed for confirmation, cancellation, photo/video removal,
+patient deletion, 44px controls and clearing the deleted patient's direct link.
+No production patient or media was deleted during verification.
+
 ## Favorites and celebrities — 29 October 2026
 
 Patient records have independent Favorite and Celebrity markers shared across the

@@ -45,17 +45,22 @@ export async function POST(request: Request, { params }: Context) {
     const result = await database().$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`media-title:${body.general}:${id}`}))`;
       if (body.general) {
-        const record = await tx.generalMedia.findFirst({ where: { id, generalUpload: { clinicId: clinic.id } }, include: { generalUpload: true } });
+        let record = await tx.generalMedia.findFirst({ where: { id, deletedAt: null, generalUpload: { clinicId: clinic.id } }, include: { generalUpload: true } });
         if (!record) throw new UploadError("MEDIA_NOT_FOUND", 404);
         if (!record.generalUpload.finishedAt) throw new UploadError("UPLOAD_INCOMPLETE", 409);
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`batch:${record.generalUpload.uploadId}`}))`;
+        // Deletion shares the batch lock; the pre-lock record may be stale.
+        record = await tx.generalMedia.findFirst({ where: { id, deletedAt: null, generalUpload: { clinicId: clinic.id } }, include: { generalUpload: true } });
+        if (!record) throw new UploadError("MEDIA_NOT_FOUND", 404);
         return renameVideo(tx, record, record.generalUpload.uploadId, title, true);
       }
-      const record = await tx.media.findFirst({ where: { id, session: { patient: { clinicId: clinic.id } } }, include: { session: true } });
+      let record = await tx.media.findFirst({ where: { id, deletedAt: null, session: { patient: { clinicId: clinic.id, deletedAt: null } } }, include: { session: true } });
       if (!record) throw new UploadError("MEDIA_NOT_FOUND", 404);
       if (!record.session.finishedAt) throw new UploadError("UPLOAD_INCOMPLETE", 409);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`batch:${record.session.uploadId}`}))`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${record.session.patientId}`}))`;
+      record = await tx.media.findFirst({ where: { id, deletedAt: null, session: { patient: { clinicId: clinic.id, deletedAt: null } } }, include: { session: true } });
+      if (!record) throw new UploadError("MEDIA_NOT_FOUND", 404);
       const patient = await tx.patient.findUniqueOrThrow({ where: { id: record.session.patientId }, select: { archivedAt: true } });
       if (patient.archivedAt) throw new UploadError("PATIENT_ARCHIVED", 409);
       return renameVideo(tx, record, record.session.uploadId, title, false);

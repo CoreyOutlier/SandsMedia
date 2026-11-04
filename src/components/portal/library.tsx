@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from "@/lib/consent";
 import { MediaGallery } from "./media-gallery";
-import { portalApi, withdrawPatient, renewPatientConsent, displayDate, type ArchiveFilter, type CollectionFilter, type Row, type Detail } from "./types";
+import { portalApi, PortalRequestError, withdrawPatient, renewPatientConsent, deleteLibraryMedia, deleteLibraryPatient, displayDate, type ArchiveFilter, type CollectionFilter, type Row, type Detail, type MediaItem } from "./types";
 
 const statusText = (status: string) => ({ cleared: "Cleared for social", hold: "Not cleared", withdrawn: "Consent withdrawn", private: "Private footage", archived: "Archived" }[status] ?? status);
 const historyText = (action: string) => ({ consent_withdrawn: "Consent withdrawn", renewal_recorded: "Renewal record created", consent_renewed: "Written consent renewed", archived: "Patient archived", restored: "Patient restored" }[action] ?? "Consent record added");
@@ -47,6 +47,13 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
  const [archiveOpen, setArchiveOpen] = useState(false);
  const [archiveError, setArchiveError] = useState("");
  const [archiveNotice, setArchiveNotice] = useState("");
+ const [deleteOpen, setDeleteOpen] = useState(false);
+ const [deleteConfirm, setDeleteConfirm] = useState(false);
+ const [deleteError, setDeleteError] = useState("");
+ const [patientDeletePending, setPatientDeletePending] = useState(false);
+ const [deletionNotice, setDeletionNotice] = useState("");
+ const deletePanel = useRef<HTMLElement>(null);
+ const deletionLock = useRef(false);
  const renewalRequest = useRef("");
  const consentPanel = useRef<HTMLElement>(null);
  const [clinicName, setClinicName] = useState("Dr. Sands");
@@ -66,7 +73,7 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
  }, [q, filter, media, general, archive, collection, version, listVersion]);
  useEffect(() => {
   const generation = ++detailGeneration.current;
-  setShareOpen(false); setShareUrl(""); setShareError(""); setConsentMode(null); setConsentConfirm(false); setConsentError(""); setConsentNotice(""); setArchiveOpen(false); setArchiveError(""); setArchiveNotice(""); setCollectionFeedback(old => old?.source === "detail" ? null : old); setDetail(null); renewalRequest.current = "";
+  setShareOpen(false); setShareUrl(""); setShareError(""); setConsentMode(null); setConsentConfirm(false); setConsentError(""); setConsentNotice(""); setArchiveOpen(false); setArchiveError(""); setArchiveNotice(""); setDeleteOpen(false); setDeleteConfirm(false); setDeleteError(""); setPatientDeletePending(false); setCollectionFeedback(old => old?.source === "detail" ? null : old); setDetail(null); renewalRequest.current = "";
   if (!selected) return;
   portalApi<Detail>(`/api/${general ? "general" : "patients"}/${selected}`).then(r => { if (generation === detailGeneration.current) setDetail(r); }).catch(e => { if (generation === detailGeneration.current) setError(e.message); });
  }, [selected, general, version]);
@@ -145,12 +152,56 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
   catch (e) { setShareError((e as Error).message); } finally { setBusyAction(""); }
  }
  function renameMedia(id: string, title: string | null) { setDetail(old => old ? { ...old, sessions: old.sessions.map(s => ({ ...s, media: s.media.map(m => m.id === id ? { ...m, title } : m) })) } : old); }
+ async function removeMedia(item: MediaItem) {
+  if (!detail || mutating || deletionLock.current) throw new PortalRequestError("Another change is being saved. Please try again.");
+  const ownerId = detail.id;
+  deletionLock.current = true; setBusyAction(`delete-media-${item.id}`); setNotice("");
+  try {
+   await deleteLibraryMedia(item.id, general);
+   ++searchGeneration.current; ++detailGeneration.current; setLoading(false);
+   setDetail(old => old?.id === ownerId ? { ...old, sessions: old.sessions.map(s => ({ ...s, media: s.media.filter(m => m.id !== item.id) })) } : old);
+   setRows(old => old.map(row => row.id === ownerId ? { ...row, photos: Math.max(0, row.photos - (item.kind === "photo" ? 1 : 0)), videos: Math.max(0, row.videos - (item.kind === "video" ? 1 : 0)) } : row));
+   setShareOpen(false); setShareUrl(""); setListVersion(v => v + 1);
+   setNotice(`${item.kind === "video" ? "Video" : "Photo"} deleted and moved to private Drive Trash.${general ? "" : " Consent history is unchanged."}`);
+  } finally { deletionLock.current = false; setBusyAction(""); }
+ }
+ function openPatientDeletion() {
+  setDeleteOpen(true); setDeleteConfirm(false); setDeleteError(""); setArchiveOpen(false); setConsentMode(null);
+  requestAnimationFrame(() => { deletePanel.current?.scrollIntoView({ behavior: "smooth", block: "center" }); deletePanel.current?.focus({ preventScroll: true }); });
+ }
+ function clearDeletedPatientUrl(id: string) {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("patient") !== id) return;
+  url.searchParams.delete("patient");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+ }
+ async function removePatient() {
+  if (!detail || general || !deleteConfirm || mutating || deletionLock.current) return;
+  const id = detail.id;
+  deletionLock.current = true; setBusyAction("delete-patient"); setDeleteError("");
+  try {
+   await deleteLibraryPatient(id);
+   clearDeletedPatientUrl(id);
+   ++searchGeneration.current; ++detailGeneration.current; setLoading(false);
+   setRows(old => old.filter(row => row.id !== id)); setDetail(null); setSelected(""); setShowDetail(false); setShareOpen(false); setShareUrl(""); setListVersion(v => v + 1);
+   setDeletionNotice("Patient deleted. Their folder and all photos and videos moved to private Drive Trash. Share links are revoked; consent history is retained.");
+   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  } catch (e) {
+   setDeleteError((e as Error).message);
+   if (e instanceof PortalRequestError && e.code === "DELETION_PENDING") {
+    clearDeletedPatientUrl(id);
+    ++searchGeneration.current; ++detailGeneration.current; setLoading(false);
+    setRows(old => old.filter(row => row.id !== id)); setPatientDeletePending(true); setShareOpen(false); setShareUrl("");
+   }
+  } finally { deletionLock.current = false; setBusyAction(""); }
+ }
  const allMedia = detail?.sessions.flatMap(s => s.media) ?? [];
  const archived = !!detail?.archivedAt;
  const cleared = detail?.clearance?.status === "cleared" && !archived;
  const withdrawn = detail?.clearance?.status === "withdrawn";
  const visibleSessions = detail?.sessions.filter(s => media === "all" || s.media.some(m => m.kind === media)) ?? [];
  const activeLinks = detail?.links.filter(l => !l.revokedAt && new Date(l.expiresAt).getTime() > Date.now()).length ?? 0;
+ const patientDeleteConfirmation = <section className="patient-delete-confirm" ref={deletePanel} tabIndex={-1} aria-labelledby="delete-patient-title"><h3 id="delete-patient-title">{patientDeletePending ? "Finish deleting this patient" : "Delete this patient and all media?"}</h3><p>{patientDeletePending ? "This patient is already hidden from the portal and their share links are revoked. Retry to finish moving the patient folder to private Drive Trash." : "This removes the patient from the portal and moves their entire folder, including every photo and video, to private Drive Trash. All share links will be revoked."}</p><p>Consent history is retained. This cannot be undone in the portal. To keep files here and restore the patient later, use Archive instead.</p>{!patientDeletePending && <label className="consent-choice"><input type="checkbox" checked={deleteConfirm} disabled={mutating} onChange={e => setDeleteConfirm(e.target.checked)} /><span>I want to delete this patient and all of their photos and videos.</span></label>}{deleteError && <p className="upload-error" role="alert">{deleteError}</p>}<div className="consent-action-buttons"><button className="button danger" disabled={!deleteConfirm || mutating} onClick={removePatient}>{busyAction === "delete-patient" ? "Deleting patient…" : deleteError || patientDeletePending ? "Retry deletion" : "Delete patient"}</button><button className="button quiet" disabled={mutating} onClick={() => { if (patientDeletePending) { setSelected(""); setDetail(null); setShowDetail(false); setListVersion(v => v + 1); setDeletionNotice("The patient is hidden from the portal. Use Settings → Check storage to finish the pending Drive cleanup."); } else { setDeleteOpen(false); setDeleteConfirm(false); setDeleteError(""); } }}>{patientDeletePending ? "Back to library" : "Cancel"}</button></div>{busyAction === "delete-patient" && <p className="deletion-progress" role="status">Removing access and moving the patient folder to Trash. Keep this page open.</p>}</section>;
 
  return <section className={`portal-library library-refined ${showDetail ? "show-detail" : ""}`}>
   <header className="library-topbar"><div><p className="eyebrow">Posting Center / Private library</p><h1>{general ? "Other uploads" : "Patients"}</h1><p className="library-intro">{general ? "Every idea, take, and behind-the-scenes moment." : "Photos, videos, and consent. All in one place."}</p></div><Link className="button primary" href={general ? "/upload?type=general" : "/upload"}>＋ New upload</Link></header>
@@ -161,6 +212,7 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
    <label className="library-select"><span>Show</span><select disabled={mutating} aria-label="Filter by media type" value={media} onChange={e => setMedia(e.target.value)}><option value="all">All media</option><option value="photo">Photos only</option><option value="video">Videos only</option></select></label>
    {!general && <label className="library-select"><span>Library</span><select disabled={mutating} aria-label="Filter by archive status" value={archive} onChange={e => { setArchive(e.target.value as ArchiveFilter); setSelected(""); }}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All patients</option></select></label>}
   </div>
+  {deletionNotice && <p className="portal-notice library-action-notice" role="status">{deletionNotice}<button aria-label="Dismiss deletion message" onClick={() => setDeletionNotice("")}>×</button></p>}
   <aside className="directory" aria-label={general ? "Upload directory" : "Patient directory"}>
    {error && <p className="upload-error directory-error" role="alert">{error}<button className="button quiet" onClick={refresh}>Try again</button></p>}
    <div className="search-summary" aria-live="polite"><span>{loading && rows.length === 0 ? "Opening library…" : `${rows.length}${more ? "+" : ""} ${general ? (rows.length === 1 && !more ? "upload" : "uploads") : (rows.length === 1 && !more ? "patient" : "patients")}`}</span>{q.length === 1 ? <span>Type one more character</span> : (q || filter !== "all" || media !== "all" || archive !== "active" || collection !== "all") && <button disabled={mutating} onClick={() => { setQ(""); setFilter("all"); setMedia("all"); setArchive("active"); setCollection("all"); setSelected(""); setCollectionFeedback(null); }}>Reset filters</button>}</div>
@@ -174,11 +226,12 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
    <p className="directory-footnote">Private files. Access limited to your team.</p>
   </aside>
   <div className="patient-detail">
-   <button className="button quiet directory-back" onClick={() => { setShowDetail(false); requestAnimationFrame(() => window.scrollTo({ top: directoryScroll.current })); }}>← Back to {general ? "uploads" : "patients"}</button>
+   <button className="button quiet directory-back" disabled={mutating} onClick={() => { setShowDetail(false); requestAnimationFrame(() => window.scrollTo({ top: directoryScroll.current })); }}>← Back to {general ? "uploads" : "patients"}</button>
    {error && <p className="upload-error" role="alert">{error} <button className="button quiet" onClick={refresh}>Try again</button></p>}
    {notice && <p className="portal-notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></p>}
    {!detail ? <div className="detail-empty"><span className="detail-empty-mark" aria-hidden="true"><FolderIcon /></span><h2>{selected ? "Opening your library…" : general ? "Every clip, in its place." : "Every smile, in one place."}</h2><p>{selected ? "Loading your private photos and videos." : "Choose an item to see its photos, videos, and details."}</p></div> : <>
     <header className={`patient-heading ${!general && detail.isCelebrity ? "is-celebrity" : ""}`}><div><p className="patient-record-id">{detail.displayId}{archived ? " / Archived patient" : general ? " / Private footage" : " / Patient record"}</p><h1>{detail.name}</h1>{!general && detail.isCelebrity && <span className="celebrity-badge"><CelebrityIcon />Celebrity</span>}</div></header>
+    {patientDeletePending ? patientDeleteConfirmation : <>
     {!general && <div className="patient-collections"><div className="patient-collection-controls" role="group" aria-label="Patient collections"><button className="button collection-toggle favorite-toggle" disabled={mutating} aria-pressed={!!detail.isFavorite} aria-busy={busyAction === `favorite-${detail.id}`} onClick={() => changeCollectionFlag(detail.id, "favorite", !detail.isFavorite, "detail")}><StarIcon />{busyAction === `favorite-${detail.id}` ? "Saving…" : "Favorite"}</button><button className="button collection-toggle celebrity-toggle" disabled={mutating} aria-pressed={!!detail.isCelebrity} aria-busy={busyAction === `celebrity-${detail.id}`} onClick={() => changeCollectionFlag(detail.id, "celebrity", !detail.isCelebrity, "detail")}><CelebrityIcon />{busyAction === `celebrity-${detail.id}` ? "Saving…" : "Celebrity"}</button><span>Shared team collections</span></div>{collectionFeedback?.source === "detail" && <p className={`collection-feedback ${collectionFeedback.error ? "error" : ""}`} role={collectionFeedback.error ? "alert" : "status"}>{collectionFeedback.message}</p>}</div>}
     {!general && <div className={`clearance-banner ${archived ? "archived" : detail.clearance?.status}`}><div><strong>{archived ? "Patient archived" : statusText(detail.clearance?.status ?? "hold")}</strong><p>{archived ? "Files and consent history are safely retained. Restore this patient to add media or share again." : cleared ? "Written consent is on file. Ready to post and share." : withdrawn ? "You can still upload and download privately. Posting and sharing are paused until new written consent is recorded." : detail.sessions.length === 0 ? "Add photos or videos to create this patient’s first session." : `${detail.clearance?.missing ?? 0} sessions need consent or upload completion before posting and sharing.`}</p></div>{archived ? <button className="button" disabled={mutating} onClick={changeArchive}>{busyAction === "restore" ? "Restoring…" : "Restore patient"}</button> : withdrawn && detail.sessions.some(s => s.finished) && <button className="button" disabled={mutating} onClick={() => openConsent("renew")}>Record new consent</button>}</div>}
     <div className="detail-actions"><a className="button primary" href={detail.download} download>↓ Download all</a>{!general && <button className="button" disabled={!cleared || !sharingReady || mutating} onClick={() => setShareOpen(!shareOpen)} aria-expanded={shareOpen}>Share by text</button>}{detail.driveUrl && <a className="button quiet" href={detail.driveUrl} target="_blank" rel="noreferrer"><FolderIcon />Open in Drive ↗</a>}{!archived && <Link className="button quiet add-media-link" href={general ? "/upload?type=general" : `/upload?patient=${detail.id}`}>＋ Add media</Link>}</div>
@@ -190,7 +243,7 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
     {!visibleSessions.length && <p className="empty-media">No {media === "video" ? "videos" : media === "photo" ? "photos" : "files"} match the current view.</p>}
     {visibleSessions.map(s => <section className="visit" key={s.id}><div className="visit-heading"><div><p className="visit-date">{displayDate(s.date)}</p><h2>{s.title}</h2><p>{s.uploadedBy ? `Uploaded by ${s.uploadedBy}` : "Private upload"}{!s.finished ? " · Upload unfinished" : s.consented ? " · Consent recorded" : ""}</p></div>{!general && (cleared && s.consented ? <label className="session-status"><span className="sr-only">Posting status for {s.title}</span><select disabled={mutating} value={s.status} onChange={e => changeStatus(s.id, e.target.value)}><option value="ready">Ready to post</option><option value="posted">Posted</option></select>{busyAction === `status-${s.id}` && <small role="status">Saving…</small>}</label> : <span className="clearance-badge hold">{s.status === "posted" ? "Posted — review required" : archived ? "Archived" : "Not cleared"}</span>)}</div>
      {(s.photosDriveUrl || s.videosDriveUrl || s.driveUrl) && <div className="visit-storage"><span><FolderIcon />Drive folders</span>{s.photosDriveUrl && <a href={s.photosDriveUrl} target="_blank" rel="noreferrer">Photos ↗</a>}{s.videosDriveUrl && <a href={s.videosDriveUrl} target="_blank" rel="noreferrer">Videos ↗</a>}{!s.photosDriveUrl && !s.videosDriveUrl && s.driveUrl && <a href={s.driveUrl} target="_blank" rel="noreferrer">Open session ↗</a>}</div>}
-     <MediaGallery media={s.media} filter={media} pairs={!general} editable={!archived && !!s.finished} general={general} onRenamed={renameMedia} />
+     <MediaGallery media={s.media} filter={media} pairs={!general} editable={!archived && !!s.finished} general={general} disabled={mutating} onRenamed={renameMedia} onDelete={removeMedia} />
      {s.quote && <blockquote className="testimonial">“{s.quote}”</blockquote>}{s.description && <p className="visit-notes">{s.description}</p>}{!general && cleared && <details className="caption-details"><summary>Caption draft</summary><div className="caption-draft"><p>Before and after: {s.title} at {clinicName}. {s.description} Shared with the patient’s written consent.</p><button className="button quiet" onClick={() => copy(`Before and after: ${s.title} at ${clinicName}. ${s.description ?? ""} Shared with the patient’s written consent.`)}>Copy caption</button></div></details>}
     </section>)}
     {!general && <>
@@ -204,7 +257,10 @@ export function Library({ general = false, initialId = "" }: { general?: boolean
       <div className="patient-setting-row archive-setting"><div><h3>{archived ? "Restore this patient" : "Archive this patient"}</h3><p>{archived ? "Return the patient to the active library. Their consent status stays unchanged." : "Keep the library tidy without losing photos, videos, or consent history. You can restore the patient later."}</p></div><button className="button quiet" disabled={mutating} onClick={() => archived ? changeArchive() : setArchiveOpen(!archiveOpen)}>{busyAction === "restore" ? "Restoring…" : archived ? "Restore patient" : "Archive patient"}</button></div>
       {archiveOpen && <div className="archive-confirm"><p>This patient will move to Archived. Sharing and posting will be blocked, and existing share links revoked. Their private files stay safely stored.</p>{archiveError && <p className="upload-error" role="alert">{archiveError}</p>}<div className="consent-action-buttons"><button className="button" disabled={mutating} onClick={changeArchive}>{busyAction === "archive" ? "Archiving…" : "Confirm archive"}</button><button className="button quiet" disabled={mutating} onClick={() => setArchiveOpen(false)}>Cancel</button></div></div>}
       {archiveNotice && <p className="action-success" role="status">{archiveNotice}</p>}
+      <div className="patient-setting-row delete-setting"><div><h3>Delete this patient</h3><p>Remove this patient and all their media from the portal. Their files move to private Drive Trash; consent history is retained.</p></div><button className="button quiet danger-text" disabled={mutating} aria-expanded={deleteOpen} onClick={openPatientDeletion}>Delete patient</button></div>
+      {deleteOpen && patientDeleteConfirmation}
      </section>
+    </>}
     </>}
    </>}
   </div>

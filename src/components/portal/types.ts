@@ -6,7 +6,7 @@ export type Detail = { id: string; name: string; displayId: string; isFavorite: 
 export type Row = { id: string; name: string; displayId: string; isFavorite: boolean; isCelebrity: boolean; date: string; photos: number; videos: number; status: string; posted?: number; incomplete: boolean; archived: boolean };
 export type ArchiveFilter = "active" | "archived" | "all";
 export type CollectionFilter = "all" | "favorites" | "celebrities";
-export class PortalRequestError extends Error { retryable: boolean; constructor(message: string, retryable = false) { super(message); this.retryable = retryable; } }
+export class PortalRequestError extends Error { retryable: boolean; code?: string; constructor(message: string, retryable = false, code?: string) { super(message); this.retryable = retryable; this.code = code; } }
 export async function portalApi<T>(path: string, body?: unknown, timeoutMs = 45000): Promise<T> {
  let response: Response;
  try { response = await fetch(path, { method: body === undefined ? "GET" : "POST", headers: body === undefined ? undefined : { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(timeoutMs) }); }
@@ -21,9 +21,10 @@ export async function portalApi<T>(path: string, body?: unknown, timeoutMs = 450
    LINK_EXPIRED: "This link has expired or was revoked.", PIN_REQUIRED: "Enter the PIN to open this private link.", PIN_INCORRECT: "That PIN is incorrect.",
    TOO_MANY_ATTEMPTS: "Too many attempts. Please try again in 15 minutes.", PASSCODE_TOO_SHORT: "Use a passcode with at least 12 characters.",
    INVALID_FIELDS: "Please check the fields and try again.", PATIENT_NOT_FOUND: "This patient is unavailable.", UPLOAD_NOT_FOUND: "This upload is unavailable.",
-   MEDIA_NOT_FOUND: "This file is unavailable.", NO_MEDIA: "There are no completed files to download.", NO_COMPLETED_SESSIONS: "Finish an upload before recording consent.", UPLOAD_INCOMPLETE: "Finish this upload before editing its video titles or consent.", INVALID_CONSENT: "Confirm that new written consent is on file before continuing.", DRIVE_UNAVAILABLE: "Private storage is taking longer than expected. Please try again."
+   MEDIA_NOT_FOUND: "This file is unavailable.", NO_MEDIA: "There are no completed files to download.", NO_COMPLETED_SESSIONS: "Finish an upload before recording consent.", UPLOAD_INCOMPLETE: "Finish this upload before editing its video titles or consent.", INVALID_CONSENT: "Confirm that new written consent is on file before continuing.", DRIVE_UNAVAILABLE: "Private storage is taking longer than expected. Please try again.",
+   DELETE_CONFIRMATION_REQUIRED: "Confirm the deletion before continuing.", DELETION_PENDING: "Removed from the portal. Drive cleanup could not finish. Retry deletion to complete it."
   };
-  throw new PortalRequestError(messages[data.error] ?? "This request could not be completed. Please try again.", response.status >= 500 || response.status === 408);
+  throw new PortalRequestError(messages[data.error] ?? "This request could not be completed. Please try again.", response.status >= 500 || response.status === 408, typeof data.error === "string" ? data.error : undefined);
  }
  return data;
 }
@@ -37,3 +38,20 @@ async function retryPatientAction(id: string, body: unknown, timeoutMs = 45000):
 }
 export const withdrawPatient = (id: string) => retryPatientAction(id, { action: "withdraw" });
 export const renewPatientConsent = (id: string, requestId: string) => retryPatientAction(id, { action: "renew_consent", confirmed: true, requestId }, 180000);
+
+// The server records deletion before touching Drive. Retrying the same identifier
+// resumes that cleanup rather than creating another deletion operation.
+async function retryDeletion(path: string, body: unknown): Promise<void> {
+ const request = () => portalApi<{ deleted: true }>(path, body, 180000);
+ try { await request(); } catch (e) {
+  if (!(e instanceof PortalRequestError) || !e.retryable) throw e;
+  try { await request(); } catch (retryError) {
+   // A failed retry cannot undo the server's confirmed access removal. Preserve
+   // that state in the interface even if the retry loses its network response.
+   if (e.code === "DELETION_PENDING") throw e;
+   throw retryError;
+  }
+ }
+}
+export const deleteLibraryMedia = (id: string, general: boolean) => retryDeletion(`/api/media/${id}/delete`, { general, confirmed: true });
+export const deleteLibraryPatient = (id: string) => retryDeletion(`/api/patients/${id}/delete`, { confirmed: true });

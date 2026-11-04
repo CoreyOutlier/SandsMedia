@@ -21,6 +21,7 @@ async function ownedBatch(tx:Tx,id:string,identity:Identity,lockPatient=false) {
       // while this upload request was waiting for its batch lock.
       batch.session.patient=await tx.patient.findUniqueOrThrow({where:{id:batch.session.patientId}});
     }
+    if(batch.session.patient.deletedAt)throw new UploadError("UPLOAD_NOT_FOUND",404);
     if(batch.session.patient.archivedAt)throw new UploadError("PATIENT_ARCHIVED",409);
     // Social consent never gates private storage. Withdrawal remains in force
     // until explicitly renewed through the patient's consent controls.
@@ -29,7 +30,7 @@ async function ownedBatch(tx:Tx,id:string,identity:Identity,lockPatient=false) {
 }
 function payload(batch:Awaited<ReturnType<typeof ownedBatch>>) {
   const item=batch.session??batch.generalUpload!;
-  return {id:batch.id,general:!!batch.generalUpload,finished:!!item.finishedAt,date:item.date.toISOString().slice(0,10),title:batch.session?.treatment??batch.generalUpload!.title,description:item.description,uploadedBy:item.uploadedBy,consented:batch.consented,formOnFile:batch.formOnFile,patient:batch.session?{id:batch.session.patient.id,firstName:batch.session.patient.firstName,lastName:batch.session.patient.lastName,displayId:batch.session.patient.displayId,consentWithdrawn:!!batch.session.patient.consentWithdrawnAt}:null,files:(batch.manifest as unknown as FilePlan[]).map(({encryptedUrl,...file})=>file)};
+  return {id:batch.id,general:!!batch.generalUpload,finished:!!item.finishedAt,date:item.date.toISOString().slice(0,10),title:batch.session?.treatment??batch.generalUpload!.title,description:item.description,uploadedBy:item.uploadedBy,consented:batch.consented,formOnFile:batch.formOnFile,patient:batch.session?{id:batch.session.patient.id,firstName:batch.session.patient.firstName,lastName:batch.session.patient.lastName,displayId:batch.session.patient.displayId,consentWithdrawn:!!batch.session.patient.consentWithdrawnAt}:null,files:(batch.manifest as unknown as FilePlan[]).filter(file=>!file.deletedAt).map(({encryptedUrl,deletedAt,...file})=>file)};
 }
 export async function getBatch(id:string,identity:Identity) { return payload(await ownedBatch(database(),id,identity)); }
 export async function startBatch(raw:unknown,identity:Identity) {
@@ -44,7 +45,7 @@ export async function startBatch(raw:unknown,identity:Identity) {
       const u=await tx.generalUpload.create({data:{uploadId:data.uploadId,clinicId:identity.clinic.id,title:data.title,description:data.description,uploadedBy:data.uploadedBy,date:new Date(data.date)}}); generalUploadId=u.id;
     } else {
       if(data.patientId)await lock(tx,`patient:${data.patientId}`);
-      let patient=data.patientId?await tx.patient.findFirst({where:{id:data.patientId,clinicId:identity.clinic.id}}):null;
+      let patient=data.patientId?await tx.patient.findFirst({where:{id:data.patientId,clinicId:identity.clinic.id,deletedAt:null}}):null;
       if(data.patientId && !patient) throw new UploadError("PATIENT_NOT_FOUND",404);
       if(!patient) {
         const c=await tx.clinic.update({where:{id:identity.clinic.id},data:{nextPatientNumber:{increment:1}}});
@@ -86,7 +87,7 @@ export async function signFile(id:string,key:string,identity:Identity) {
   return database().$transaction(async tx=>{
     await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true);
     if((batch.session??batch.generalUpload!).finishedAt) throw new UploadError("UPLOAD_FINISHED",409);
-    const files=batch.manifest as unknown as FilePlan[]; const file=files.find(f=>f.key===key); if(!file)throw new UploadError("FILE_NOT_FOUND",404);
+    const files=batch.manifest as unknown as FilePlan[]; const file=files.find(f=>f.key===key&&!f.deletedAt); if(!file)throw new UploadError("FILE_NOT_FOUND",404);
     const dirs=await provision(tx,batch,identity); const parent=file.kind==="photo"?dirs.photos:dirs.videos;
     if(!file.driveId) file.driveId=await reserveFileId();
     const existing=await getDriveFile(file.driveId);
@@ -101,7 +102,7 @@ export async function signFile(id:string,key:string,identity:Identity) {
 export async function confirmFile(id:string,key:string,identity:Identity) {
   return database().$transaction(async tx=>{
     await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true);
-    const files=batch.manifest as unknown as FilePlan[]; const file=files.find(f=>f.key===key); if(!file?.driveId) throw new UploadError("FILE_NOT_FOUND",404);
+    const files=batch.manifest as unknown as FilePlan[]; const file=files.find(f=>f.key===key&&!f.deletedAt); if(!file?.driveId) throw new UploadError("FILE_NOT_FOUND",404);
     if(file.confirmed) return {confirmed:true};
     const actual=await getDriveFile(file.driveId); const expectedParent=file.kind==="photo"?batch.photosFolderId:batch.videosFolderId;
     if(!actual || actual.trashed || !actual.parents?.includes(expectedParent??"") || actual.appProperties?.postingCenterKey!==`file:${id}:${key}` || actual.mimeType!==file.mimeType || actual.name!==file.name || Number(actual.size)!==file.bytes) throw new UploadError("FILE_NOT_CONFIRMED",409);
@@ -117,14 +118,14 @@ export async function confirmFile(id:string,key:string,identity:Identity) {
   },{timeout:30000});
 }
 export async function renewFile(id:string,key:string,identity:Identity) {
-  await database().$transaction(async tx=>{await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true); const files=batch.manifest as unknown as FilePlan[]; const f=files.find(f=>f.key===key); if(!f)throw new UploadError("FILE_NOT_FOUND",404); delete f.encryptedUrl; await tx.uploadBatch.update({where:{id},data:{manifest:files as unknown as Prisma.InputJsonValue}});});
+  await database().$transaction(async tx=>{await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true); const files=batch.manifest as unknown as FilePlan[]; const f=files.find(f=>f.key===key&&!f.deletedAt); if(!f)throw new UploadError("FILE_NOT_FOUND",404); delete f.encryptedUrl; await tx.uploadBatch.update({where:{id},data:{manifest:files as unknown as Prisma.InputJsonValue}});});
 }
 export async function finishBatch(id:string,identity:Identity,request:Request) {
   // Commit the immutable event before copying it to Drive. A network failure must
   // not leave a Drive consent file referring to a rolled-back event.
   await database().$transaction(async tx=>{
     await lock(tx,`batch:${id}`);const batch=await ownedBatch(tx,id,identity,true);
-    const files=batch.manifest as unknown as FilePlan[];
+    const files=(batch.manifest as unknown as FilePlan[]).filter(file=>!file.deletedAt);
     if(!files.every(f=>f.confirmed))throw new UploadError("UPLOAD_INCOMPLETE",409);
     if(batch.session && batch.consented && !await tx.consentEvent.findFirst({where:{sessionId:batch.session.id,renewalId:null}})){
       const address=request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()??"";
@@ -133,7 +134,7 @@ export async function finishBatch(id:string,identity:Identity,request:Request) {
   });
   return database().$transaction(async tx=>{
     await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true); const item=batch.session??batch.generalUpload!;
-    const files=batch.manifest as unknown as FilePlan[];
+    const files=(batch.manifest as unknown as FilePlan[]).filter(file=>!file.deletedAt);
     if(!files.every(f=>f.confirmed) || !item.driveFolderId) throw new UploadError("UPLOAD_INCOMPLETE",409);
     if(batch.session && batch.consented) {
       const event=await tx.consentEvent.findFirstOrThrow({where:{sessionId:batch.session.id,renewalId:null}});

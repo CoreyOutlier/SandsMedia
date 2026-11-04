@@ -286,3 +286,16 @@ consent, media and archive filters. Celebrity records receive a restrained gold
 badge and accent in the private directory and detail view. Keep social clearance
 visible and unchanged. Neither marker grants permission to post or share, and
 neither appears in public shares. Other uploads remains a separate general library.
+
+## Owner addition — 4 November 2026: delete media and patients
+
+Provide confirmed deletion of individual photos/videos in both private libraries
+and whole patients. Keep Archive as the reversible option. Remove deleted objects
+from the portal immediately, move their Drive file or patient folder to Trash,
+and revoke every share link for a deleted patient. Individual media deletion must
+also block its existing shared/download URLs. Preserve immutable consent/history
+and database anchors so stale uploads and reconciliation cannot recreate removed
+records. Confirm the exact scope before deletion and show actionable progress,
+success and retry feedback. Pending Drive cleanup remains inaccessible and can be
+retried through the same action or Settings → Check storage. No public page or
+upload-passcode identity may delete records.

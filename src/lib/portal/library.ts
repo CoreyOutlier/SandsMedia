@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { UploadError, textField, uuid } from "@/lib/upload/validation";
 import { patientCollection } from "./patient-flags";
 const folderUrl=(id:string|null|undefined)=>id?`https://drive.google.com/drive/folders/${id}`:null;
-export const patientInclude = { sessions: { orderBy: [{date:"desc"},{createdAt:"desc"}], include: { uploadBatch: { select: { photosFolderId: true, videosFolderId: true } }, media: { orderBy: {position:"asc"} }, consentEvents: { select: {consented:true,formOnFile:true,createdAt:true,consentTextVersion:true} } } } } satisfies Prisma.PatientInclude;
+export const patientInclude = { sessions: { orderBy: [{date:"desc"},{createdAt:"desc"}], include: { uploadBatch: { select: { photosFolderId: true, videosFolderId: true } }, media: { where: {deletedAt:null}, orderBy: {position:"asc"} }, consentEvents: { select: {consented:true,formOnFile:true,createdAt:true,consentTextVersion:true} } } } } satisfies Prisma.PatientInclude;
 export function mediaDto(m: {id:string;kind:string;fileName:string;bytes:bigint;width:number|null;height:number|null;durationS:number|null;position:number;label?:string;title?:string|null}, general=false, ticket?:string) {
   const query = new URLSearchParams(); if(general)query.set("general","1");if(ticket)query.set("ticket",ticket);
   const suffix=query.size?`?${query}`:"";
@@ -12,7 +12,7 @@ export function mediaDto(m: {id:string;kind:string;fileName:string;bytes:bigint;
 }
 export async function patientDetail(id:string,clinicId:string) {
   if(!uuid(id))throw new UploadError("PATIENT_NOT_FOUND",404);
-  const p=await database().patient.findFirst({where:{id,clinicId},include:patientInclude});
+  const p=await database().patient.findFirst({where:{id,clinicId,deletedAt:null},include:patientInclude});
   if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);
   const status=clearance(p);
   const consentHistory=await database().patientActivity.findMany({where:{patientId:id},orderBy:{createdAt:"desc"},take:50,select:{id:true,action:true,actor:true,createdAt:true}});
@@ -21,7 +21,7 @@ export async function patientDetail(id:string,clinicId:string) {
 }
 export async function generalDetail(id:string,clinicId:string) {
   if(!uuid(id))throw new UploadError("UPLOAD_NOT_FOUND",404);
-  const u=await database().generalUpload.findFirst({where:{id,clinicId},include:{uploadBatch:{select:{photosFolderId:true,videosFolderId:true}},media:{orderBy:{position:"asc"}}}});
+  const u=await database().generalUpload.findFirst({where:{id,clinicId},include:{uploadBatch:{select:{photosFolderId:true,videosFolderId:true}},media:{where:{deletedAt:null},orderBy:{position:"asc"}}}});
   if(!u)throw new UploadError("UPLOAD_NOT_FOUND",404);
   return {id:u.id,name:u.title,displayId:"Other uploads",archivedAt:null,isFavorite:false,isCelebrity:false,consentHistory:[],driveUrl:u.driveFolderId?`https://drive.google.com/drive/folders/${u.driveFolderId}`:null,download:`/api/download/general/${u.id}`,sessions:[{id:u.id,date:u.date.toISOString().slice(0,10),title:u.title,driveUrl:folderUrl(u.driveFolderId),photosDriveUrl:folderUrl(u.uploadBatch?.photosFolderId),videosDriveUrl:folderUrl(u.uploadBatch?.videosFolderId),description:u.description,uploadedBy:u.uploadedBy,status:"private",finished:!!u.finishedAt,consented:false,media:u.media.map(m=>mediaDto(m,true))}],links:[],postedSessions:[]};
 }
@@ -34,30 +34,30 @@ export async function listLibrary(body:Record<string,unknown>,clinicId:string) {
   const pattern=(v:string)=>`%${v.replace(/[\\%_]/g,"\\$&")}%`;
   type Result={id:string;name:string;display_id:string;date:Date;photos:bigint;videos:bigint;status:string;posted:bigint;incomplete:boolean;archived:boolean;is_favorite:boolean;is_celebrity:boolean};
   let rows:Result[];
-  if(general){const match=q.length>=2?Prisma.sql`AND (u.title ILIKE ${pattern(q)} OR u.description ILIKE ${pattern(q)} OR EXISTS(SELECT 1 FROM general_media m WHERE m.general_upload_id=u.id AND m.title ILIKE ${pattern(q)}))`:Prisma.empty;
+  if(general){const match=q.length>=2?Prisma.sql`AND (u.title ILIKE ${pattern(q)} OR u.description ILIKE ${pattern(q)} OR EXISTS(SELECT 1 FROM general_media m WHERE m.general_upload_id=u.id AND m.deleted_at IS NULL AND m.title ILIKE ${pattern(q)}))`:Prisma.empty;
     rows=await database().$queryRaw<Result[]>(Prisma.sql`
       SELECT u.id,u.title AS name,'Other uploads' AS display_id,u.date,
-      (SELECT count(*) FROM general_media m WHERE m.general_upload_id=u.id AND m.kind='photo') AS photos,
-      (SELECT count(*) FROM general_media m WHERE m.general_upload_id=u.id AND m.kind='video') AS videos,
+      (SELECT count(*) FROM general_media m WHERE m.general_upload_id=u.id AND m.deleted_at IS NULL AND m.kind='photo') AS photos,
+      (SELECT count(*) FROM general_media m WHERE m.general_upload_id=u.id AND m.deleted_at IS NULL AND m.kind='video') AS videos,
       'private' AS status,0::bigint AS posted,u.finished_at IS NULL AS incomplete,false AS archived,false AS is_favorite,false AS is_celebrity
       FROM general_uploads u WHERE u.clinic_id=${clinicId}::uuid ${match}
-      AND (${kind}='all' OR EXISTS(SELECT 1 FROM general_media m WHERE m.general_upload_id=u.id AND m.kind::text=${kind}))
+      AND (${kind}='all' OR EXISTS(SELECT 1 FROM general_media m WHERE m.general_upload_id=u.id AND m.deleted_at IS NULL AND m.kind::text=${kind}))
       ORDER BY u.date DESC,u.created_at DESC,u.id LIMIT 51 OFFSET ${offset}`);
   }else{
-    const terms=q.length>=2?q.split(/\s+/).filter(Boolean).map(word=>{const like=pattern(word);return Prisma.sql`(p.first_name ILIKE ${like} OR p.last_name ILIKE ${like} OR p.display_id ILIKE ${like} OR EXISTS(SELECT 1 FROM sessions t WHERE t.patient_id=p.id AND t.treatment ILIKE ${like}) OR EXISTS(SELECT 1 FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.title ILIKE ${like}))`;}):[];
+    const terms=q.length>=2?q.split(/\s+/).filter(Boolean).map(word=>{const like=pattern(word);return Prisma.sql`(p.first_name ILIKE ${like} OR p.last_name ILIKE ${like} OR p.display_id ILIKE ${like} OR EXISTS(SELECT 1 FROM sessions t WHERE t.patient_id=p.id AND t.treatment ILIKE ${like}) OR EXISTS(SELECT 1 FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.deleted_at IS NULL AND m.title ILIKE ${like}))`;}):[];
     const match=terms.length?Prisma.sql`AND ${Prisma.join(terms," AND ")}`:Prisma.empty;
     rows=await database().$queryRaw<Result[]>(Prisma.sql`
       WITH candidates AS (
         SELECT p.id,p.first_name||' '||p.last_name AS name,p.display_id,
         COALESCE((SELECT max(s.date) FROM sessions s WHERE s.patient_id=p.id),p.created_at) AS date,
-        (SELECT count(*) FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.kind='photo') AS photos,
-        (SELECT count(*) FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.kind='video') AS videos,
+        (SELECT count(*) FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.deleted_at IS NULL AND m.kind='photo') AS photos,
+        (SELECT count(*) FROM media m JOIN sessions s ON s.id=m.session_id WHERE s.patient_id=p.id AND m.deleted_at IS NULL AND m.kind='video') AS videos,
         (SELECT count(*) FROM sessions s WHERE s.patient_id=p.id AND s.status='posted') AS posted,
         EXISTS(SELECT 1 FROM sessions s WHERE s.patient_id=p.id AND s.finished_at IS NULL) AS incomplete,
         p.archived_at IS NOT NULL AS archived,p.is_favorite,p.is_celebrity,
         CASE WHEN p.archived_at IS NOT NULL THEN 'archived' WHEN p.consent_withdrawn_at IS NOT NULL THEN 'withdrawn'
         WHEN NOT EXISTS(SELECT 1 FROM sessions s WHERE s.patient_id=p.id) OR EXISTS(SELECT 1 FROM sessions s WHERE s.patient_id=p.id AND (s.finished_at IS NULL OR NOT EXISTS(SELECT 1 FROM consent_events c WHERE c.session_id=s.id AND c.consented))) THEN 'hold' ELSE 'cleared' END AS status
-        FROM patients p WHERE p.clinic_id=${clinicId}::uuid ${match}
+        FROM patients p WHERE p.clinic_id=${clinicId}::uuid AND p.deleted_at IS NULL ${match}
         AND (${collection}='all' OR (${collection}='favorites' AND p.is_favorite) OR (${collection}='celebrities' AND p.is_celebrity))
         AND (${archive}='all' OR (${archive}='active' AND p.archived_at IS NULL) OR (${archive}='archived' AND p.archived_at IS NOT NULL))
       ) SELECT * FROM candidates WHERE

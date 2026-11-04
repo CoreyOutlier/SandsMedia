@@ -9,17 +9,20 @@ import { Readable } from "node:stream";
 export async function allowedMedia(id:string,request:Request){
  if(!uuid(id))throw new UploadError("MEDIA_NOT_FOUND",404);
  const url=new URL(request.url);const ticket=url.searchParams.get("ticket");const general=url.searchParams.get("general")==="1";
- if(ticket){if(general)throw new UploadError("MEDIA_NOT_FOUND",404);const link=await ticketShare(ticket);const m=await database().media.findFirst({where:{id,session:{patientId:link.patientId,finishedAt:{not:null},consentEvents:{some:{consented:true}}}}});if(!m)throw new UploadError("MEDIA_NOT_FOUND",404);return m;}
+ if(ticket){if(general)throw new UploadError("MEDIA_NOT_FOUND",404);const link=await ticketShare(ticket);const m=await database().media.findFirst({where:{id,deletedAt:null,session:{patient:{deletedAt:null},patientId:link.patientId,finishedAt:{not:null},consentEvents:{some:{consented:true}}}}});if(!m)throw new UploadError("MEDIA_NOT_FOUND",404);return m;}
  const {clinic}=await portalIdentity();
- const m=general?await database().generalMedia.findFirst({where:{id,generalUpload:{clinicId:clinic.id}}}):await database().media.findFirst({where:{id,session:{patient:{clinicId:clinic.id}}}});
+ const m=general?await database().generalMedia.findFirst({where:{id,deletedAt:null,generalUpload:{clinicId:clinic.id}}}):await database().media.findFirst({where:{id,deletedAt:null,session:{patient:{clinicId:clinic.id,deletedAt:null}}}});
  if(!m)throw new UploadError("MEDIA_NOT_FOUND",404);return m;
 }
 export async function driveStream(id:string,range?:string,signal?:AbortSignal){
  return drive().files.get({fileId:id,alt:"media",supportsAllDrives:true},{responseType:"stream",headers:range?{Range:range}:{},signal});
 }
-export async function mediaResponse(m:{driveFileId:string;fileName:string;bytes:bigint},action:string,request:Request){
+export async function mediaResponse(m:{id:string;driveFileId:string;fileName:string;bytes:bigint},action:string,request:Request){
  const api=drive();const meta=(await api.files.get({fileId:m.driveFileId,supportsAllDrives:true,fields:"mimeType,size,trashed,thumbnailLink"})).data;
  if(meta.trashed)throw new UploadError("MEDIA_NOT_FOUND",404);
+ // Metadata retrieval can overlap a delete. Revalidate immediately before
+ // opening a remote source, including on an already-issued share ticket.
+ await allowedMedia(m.id,request);
  const headers=new Headers({"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"});
  if(action==="thumbnail"){
    if(!meta.thumbnailLink){return new Response('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#eeeeee"/><text x="400" y="300" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#666">Preview processing</text></svg>',{headers:{...Object.fromEntries(headers),"Content-Type":"image/svg+xml"}});}
