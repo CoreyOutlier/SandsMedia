@@ -118,8 +118,11 @@ model Media {
   bytes       BigInt
   deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(3)
   driveTrashedAt DateTime? @map("drive_trashed_at") @db.Timestamptz(3)
+  anonymousUseVersion Int @default(0) @map("anonymous_use_version")
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   session     Session    @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  useEvents   MediaUseEvent[]
+  sharePhotos SharePhoto[]
 
   @@unique([sessionId, position])
   @@unique([sessionId, fileName])
@@ -155,6 +158,7 @@ model ConsentEvent {
 model ShareLink {
   id           String      @id @default(uuid()) @db.Uuid
   patientId    String      @map("patient_id") @db.Uuid
+  mode         String      @default("consented")
   // SHA-256 hex digest of a token generated from 32 cryptographic random bytes.
   // The raw token is never persisted.
   tokenHash    String      @unique @map("token_hash") @db.Char(64)
@@ -167,9 +171,53 @@ model ShareLink {
   lastViewedAt DateTime?   @map("last_viewed_at") @db.Timestamptz(3)
   patient      Patient     @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   views        ShareView[]
+  photos       SharePhoto[]
 
   @@index([patientId, revokedAt, expiresAt])
   @@map("share_links")
+}
+
+// Staff review under the clinic policy, separate from written patient consent.
+// Immutable events bind approval to exact source/export bytes and patient epoch.
+model MediaUseEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  mediaId           String   @map("media_id") @db.Uuid
+  version           Int
+  action            String
+  operationId       String   @unique @map("operation_id") @db.Uuid
+  actor             String
+  principalHash     String   @map("principal_hash")
+  policyTextVersion Int      @map("policy_text_version")
+  policyText        String   @map("policy_text")
+  fileChecksum      String?  @map("file_checksum") @db.Char(64)
+  exportChecksum    String?  @map("export_checksum") @db.Char(64)
+  // Binary headRevisionId; generic Drive File.version also changes during processing.
+  driveVersion      String?  @map("drive_version")
+  md5Checksum       String?  @map("md5_checksum") @db.Char(32)
+  patientVersion    Int      @map("patient_version")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  media             Media    @relation(fields: [mediaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sharePhotos       SharePhoto[]
+
+  @@unique([mediaId, version])
+  @@map("media_use_events")
+}
+
+// Immutable membership: later uploads and later approvals never enter old links.
+model SharePhoto {
+  shareLinkId String @map("share_link_id") @db.Uuid
+  mediaId     String @map("media_id") @db.Uuid
+  approvalId  String @map("approval_id") @db.Uuid
+  position    Int
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  media       Media @relation(fields: [mediaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  approval    MediaUseEvent @relation(fields: [approvalId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([shareLinkId, mediaId])
+  @@unique([shareLinkId, position])
+  @@index([mediaId])
+  @@index([approvalId])
+  @@map("share_photos")
 }
 
 model ShareView {

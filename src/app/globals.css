@@ -999,3 +999,62 @@ svg {
  .patient-collection-controls>span{width:100%;margin:1px 0 0}
  .patient-collections{margin-bottom:18px}
 }
+
+/* Upload permission choices keep private storage separate from public posting. */
+.posting-permission{min-width:0}
+.posting-permission .posting-permission-intro{font-size:13px;line-height:1.65;margin:2px 0 18px}
+.posting-permission-options{display:grid;gap:10px}
+.posting-permission .posting-permission-option{min-height:76px;padding:15px;border:1px solid #d8d8d8;border-radius:7px;background:#fff;line-height:1.5}
+.posting-permission-option>span{display:block;min-width:0}
+.posting-permission-option strong{display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:4px}
+.posting-permission-option>span>span{display:block;font-size:12px;color:#666}
+.posting-permission .posting-permission-option.selected{border-color:#777;background:#f5f5f3;box-shadow:inset 0 0 0 1px #777}
+.posting-permission.checked .posting-permission-option.selected{border-color:#51735d;background:#f5faf6;box-shadow:inset 0 0 0 1px #51735d}
+.posting-permission .posting-permission-form{margin:14px 0 4px}
+.posting-permission .posting-permission-note{line-height:1.7;margin:16px 0 10px}
+.posting-permission .posting-permission-withdrawn{padding:12px;border-left:2px solid #a76e2c;background:#fff6e9;color:#76501f;line-height:1.65}
+.posting-permission:disabled .consent-choice{cursor:default}
+@media(max-width:479px){.posting-permission{padding:16px}.posting-permission .posting-permission-option{padding:13px;gap:10px}.posting-permission-option strong{font-size:13px}}
+
+/* Anonymous use is a photo-specific review, separate from written consent. */
+.upload-anonymous-review{padding:14px 12px;border-top:1px solid var(--line);background:#f6f8f7}
+.upload-anonymous-review .consent-choice{gap:9px;line-height:1.6}
+.upload-anonymous-review .consent-choice strong{display:block;font-size:12px;line-height:1.45;margin-bottom:7px;color:#344c42}
+.upload-anonymous-review .consent-choice span>span{display:block;font-size:11px;color:#5c665f}
+.upload-anonymous-review .consent-choice input{width:22px;height:22px}
+.upload-anonymous-review p{font-size:11px;line-height:1.6;margin:10px 0 0;color:#80520c}
+.anonymous-photo-review-link{display:flex;align-items:center;min-height:44px;font-size:11px;text-decoration:underline;margin-bottom:7px}
+.anonymous-use-badge{display:inline-flex;align-items:center;font-size:10px;line-height:1.5;padding:4px 7px;margin:9px 0 2px;border:1px solid #cbded5;border-radius:4px;color:#365d4a;background:#f1f7f3}
+.media-anonymous-action,.media-anonymous-download{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;border:0;border-top:1px solid #ededed;background:transparent;padding:10px 0;text-align:left;font-size:11px;color:#365d4a}
+.media-anonymous-download svg{width:15px;height:15px;flex-shrink:0}
+.media-anonymous-action:disabled{opacity:.55}
+.anonymous-review-panel{padding:14px;margin:6px 0 14px;border:1px solid #d3dfd6;border-radius:6px;background:#f6f9f7}
+.anonymous-review-panel h3{font-size:14px;line-height:1.5;margin-bottom:8px}
+.anonymous-review-panel p{font-size:11px;line-height:1.7;margin-bottom:12px;color:#5b635e}
+.anonymous-review-panel .consent-choice{font-size:11px;line-height:1.7;gap:9px}
+.anonymous-review-buttons{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.anonymous-review-buttons .button{min-height:44px;font-size:11px;padding:9px 11px}
+.anonymous-clearance-note{padding:15px 17px;background:#f4f8f5;border-left:2px solid #779987;margin:-4px 0 18px;color:#355541}
+.anonymous-clearance-note strong{display:block;font-size:13px;line-height:1.5}
+.anonymous-clearance-note p{font-size:11px;line-height:1.7;margin:5px 0 0}
+.patient-row-main .anonymous-count{font-size:10px;color:#476951;line-height:1.5;margin-top:4px}
+.anonymous-share-button{border-color:#aec5b7;color:#365d4a}
+.anonymous-share-controls .anonymous-share-intro{font-size:12px;line-height:1.8;margin:0 0 15px}
+.anonymous-share-selection-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 12px;font-size:12px}
+.anonymous-share-selection-heading .button{min-height:44px;font-size:11px;padding:9px 10px}
+.anonymous-share-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0 18px}
+.anonymous-share-choice{display:block;min-width:0;border:1px solid #d9dfdb;border-radius:6px;background:#fff;overflow:hidden;cursor:pointer}
+.anonymous-share-choice.selected{border-color:#64866f;box-shadow:0 0 0 1px #64866f}
+.anonymous-share-choice img{width:100%;aspect-ratio:4/3;object-fit:contain;background:#edf0ed}
+.anonymous-share-choice>span{display:flex;align-items:center;gap:8px;padding:10px;min-height:48px}
+.anonymous-share-choice input{width:22px;height:22px;accent-color:#41674d;flex-shrink:0}
+.anonymous-share-choice strong{font-size:11px;font-weight:500}
+.anonymous-share-review{padding:12px 0 18px;font-size:12px;line-height:1.7}
+@media(max-width:479px){.anonymous-share-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.anonymous-review-panel{padding:11px}.anonymous-review-panel .consent-choice{display:block}.anonymous-review-panel .consent-choice input{float:left;margin:2px 9px 5px 0}.anonymous-review-panel .consent-choice::after{content:"";display:block;clear:both}.upload-anonymous-review{padding:12px 9px}.upload-anonymous-review .consent-choice{display:block}.upload-anonymous-review .consent-choice input{float:left;margin:0 8px 4px 0}.upload-anonymous-review .consent-choice strong{min-height:28px}.upload-anonymous-review .consent-choice span>span{clear:both}}
+
+.anonymous-modal-download{margin:12px 0 0 8px;color:#365d4a;border-color:#aec5b7}
+
+.anonymous-exact-review{margin:14px 0 18px}.anonymous-exact-review>img{display:block;width:100%;height:auto;max-height:70vh;object-fit:contain;background:#edf0ed;border:1px solid #d3dfd6;border-radius:4px}.anonymous-exact-review>.button{min-height:44px;font-size:11px;padding:8px 10px}.anonymous-review-panel .anonymous-review-expiry{font-size:10px;color:#6f776f;margin:7px 0 0;line-height:1.6}
+
+.anonymous-photo-grid .media-card:only-child{grid-column:1/-1}
+@media(max-width:600px){.anonymous-photo-grid{grid-template-columns:1fr}}

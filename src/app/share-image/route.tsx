@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { findShare } from "@/lib/portal/shares";
 export const runtime="nodejs";
 export async function GET(request:Request){
- let treatment="Cosmetic dentistry";try{const token=new URL(request.url).searchParams.get("token");const link=token?await findShare(token):null;const raw=link?.patient.sessions.find(s=>s.finishedAt&&s.consentEvents.some(e=>e.consented))?.treatment??"";
+ let treatment="Cosmetic dentistry";try{const token=new URL(request.url).searchParams.get("token");const link=token?await findShare(token):null;const raw=link?.mode==="consented"?link.patient.sessions.find(s=>s.finishedAt&&s.consentEvents.some(e=>e.consented))?.treatment??"":"";
  // Only recognized treatment categories enter previews. Never include arbitrary
  // patient-entered text, identity, notes, or photos in link previews.
  treatment=["Porcelain veneers","Teeth whitening","Invisalign","Smile makeover","Dental bonding","Dental implants","Crowns","Gum contouring"].find(x=>raw.toLowerCase().includes(x.toLowerCase()))??treatment;

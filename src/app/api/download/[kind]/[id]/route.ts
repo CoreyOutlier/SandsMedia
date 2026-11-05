@@ -2,21 +2,58 @@ import { ZipArchive } from "archiver";
 import { Readable } from "node:stream";
 import { database } from "@/lib/db";
 import { portalIdentity } from "@/lib/portal/access";
-import { ticketShare } from "@/lib/portal/shares";
+import { anonymousSharePhotos,ticketShare } from "@/lib/portal/shares";
 import { driveStream } from "@/lib/portal/media";
 import { downloadDisposition } from "@/lib/portal/download";
 import { drive } from "@/lib/upload/drive";
 import { uploadFailure } from "@/lib/upload/http";
 import { uuid,UploadError } from "@/lib/upload/validation";
+import { anonymousPhotoBytes } from "@/lib/portal/anonymous-use";
+import { anonymousPhotoName } from "@/lib/portal/anonymous-share";
 export const maxDuration=300;
 const safe=(s:string)=>s.replace(/[\\/\u0000-\u001f]/g,"_").replace(/^\.+/,"_").slice(0,180)||"media";
 type ZipFile={driveFileId:string;fileName:string};
+async function anonymousZip(link:Awaited<ReturnType<typeof ticketShare>>,ticket:string|null,request:Request){
+ const photos=await anonymousSharePhotos(link);if(!photos.length)throw new UploadError("NO_MEDIA",404);
+ const read=async(photo:typeof photos[number])=>{
+  const currentLink=await ticketShare(ticket);
+  if(currentLink.id!==link.id)throw new UploadError("LINK_EXPIRED",403);
+  const current=(await anonymousSharePhotos(currentLink,photo.mediaId)).find(item=>item.approvalId===photo.approvalId);
+  if(!current)return null;
+  const result=await anonymousPhotoBytes(photo.mediaId,{approvalId:photo.approvalId,patientId:link.patientId,signal:request.signal});
+  const finalLink=await ticketShare(ticket);
+  if(!(await anonymousSharePhotos(finalLink,photo.mediaId)).some(item=>item.approvalId===result.eventId))return null;
+  return result.bytes;
+ };
+ // Validate the first export before sending ZIP headers so an unavailable or
+ // changed source returns a useful error instead of an apparently valid ZIP.
+ let prepared=await read(photos[0]);if(!prepared)throw new UploadError("NO_MEDIA",404);
+ const archive=new ZipArchive({zlib:{level:0}});archive.on("error",()=>{});archive.on("warning",()=>archive.destroy(new Error("DOWNLOAD_FAILED")));
+ request.signal.addEventListener("abort",()=>{archive.abort();archive.destroy();},{once:true});
+ void(async()=>{try{
+  for(let index=0;index<photos.length;index++){
+   if(request.signal.aborted)break;const photo=photos[index];const bytes=index===0?prepared:await read(photo);prepared=null;if(!bytes)continue;
+   // A single bounded, metadata-stripped JPEG is held at a time; wait for ZIP
+   // consumption before fetching the next file to preserve backpressure.
+   await new Promise<void>((resolve,reject)=>{
+    const cleanup=()=>{archive.off("entry",done);archive.off("error",failed);request.signal.removeEventListener("abort",aborted);};
+    const done=()=>{cleanup();resolve();};const failed=()=>{cleanup();reject(new Error("DOWNLOAD_FAILED"));};const aborted=()=>{cleanup();reject(new Error("DOWNLOAD_FAILED"));};
+    archive.once("entry",done);archive.once("error",failed);request.signal.addEventListener("abort",aborted,{once:true});
+    archive.append(bytes,{name:anonymousPhotoName(photo.position)});
+   });
+  }
+  await archive.finalize();
+ }catch{archive.destroy(new Error("DOWNLOAD_FAILED"));}})();
+ return new Response(Readable.toWeb(archive) as ReadableStream,{headers:{"Content-Type":"application/zip","Content-Disposition":downloadDisposition("anonymous-photos.zip"),"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"}});
+}
 export async function GET(request:Request,{params}:{params:Promise<{kind:string;id:string}>}){try{
  const {id,kind}=await params;if(!uuid(id))throw new UploadError("MEDIA_NOT_FOUND",404);
  const db=database();const ticket=new URL(request.url).searchParams.get("ticket");
  let name="media";let folder:string|null=null;let files:ZipFile[]=[];let shareId:string|null=null;let clinicId:string|null=null;
  if(kind==="share"){
-   const link=await ticketShare(ticket);if(link.id!==id)throw new UploadError("LINK_EXPIRED",404);shareId=link.id;name=link.patient.displayId;
+   const link=await ticketShare(ticket);if(link.id!==id)throw new UploadError("LINK_EXPIRED",404);
+   if(link.mode==="anonymous")return await anonymousZip(link,ticket,request);
+   shareId=link.id;name=link.patient.displayId;
    const sessions=await db.session.findMany({where:{patientId:link.patientId,patient:{deletedAt:null},finishedAt:{not:null},consentEvents:{some:{consented:true}}},include:{media:{where:{deletedAt:null},orderBy:{position:"asc"}}},orderBy:{date:"desc"}});
    files=sessions.flatMap(s=>s.media.map(m=>({driveFileId:m.driveFileId,fileName:`${s.date.toISOString().slice(0,10)} ${safe(s.treatment)} – ${s.id.slice(0,8)}/${m.kind==="photo"?"Photos":"Videos"}/${safe(m.fileName)}`})));
  }else{

@@ -3,10 +3,12 @@ import { database } from "@/lib/db";
 import { activeLink,hashToken,readTicket,validToken,signTicket } from "./security";
 import { patientInclude,mediaDto } from "./library";
 import { UploadError } from "@/lib/upload/validation";
+import { eligibleAnonymousMedia } from "@/lib/anonymous-use";
+import { anonymousShareData } from "./anonymous-share";
 export async function findShare(token:string) {
   if(!validToken(token))return null;
   const link=await database().shareLink.findUnique({where:{tokenHash:hashToken(token)},include:{patient:{include:{...patientInclude,clinic:{select:{name:true}}}}}});
-  return link&&activeLink(link)?link:null;
+  return link&&["consented","anonymous"].includes(link.mode)&&activeLink(link)?link:null;
 }
 export async function pinUnlocked(link:{id:string;pinHash:string|null}) {
   if(!link.pinHash)return true;
@@ -17,11 +19,19 @@ export async function requireShare(token:string) {const link=await findShare(tok
 export function shareTicket(shareId:string) {return signTicket({shareId,expires:Date.now()+15*60000},"media");}
 export async function shareData(token:string) {
   const link=await requireShare(token);const p=link.patient;const ticket=shareTicket(link.id);
+  if(link.mode==="anonymous")return anonymousShareData(link,await anonymousSharePhotos(link),ticket);
   const visible=p.sessions.filter(s=>s.finishedAt&&s.consentEvents.some(e=>e.consented));
-  return {name:`${p.firstName} ${p.lastName.slice(0,1)}.`,displayId:p.displayId,expiresAt:link.expiresAt.toISOString(),hidden:p.sessions.length-visible.length,download:`/api/download/share/${link.id}?ticket=${encodeURIComponent(ticket)}`,sessions:visible.map(s=>({id:s.id,date:s.date.toISOString().slice(0,10),title:s.treatment,quote:s.testimonialQuote,media:s.media.map(m=>mediaDto(m,false,ticket))}))};
+  return {mode:"consented" as const,name:`${p.firstName} ${p.lastName.slice(0,1)}.`,displayId:p.displayId,expiresAt:link.expiresAt.toISOString(),hidden:p.sessions.length-visible.length,download:`/api/download/share/${link.id}?ticket=${encodeURIComponent(ticket)}`,sessions:visible.map(s=>({id:s.id,date:s.date.toISOString().slice(0,10),title:s.treatment,quote:s.testimonialQuote,media:s.media.map(m=>mediaDto(m,false,ticket))}))};
+}
+// Membership is a fixed snapshot. A later upload or a new approval event can
+// never add a photo to an existing anonymous link.
+export async function anonymousSharePhotos(link:{id:string;patientId:string;mode:string},mediaId?:string) {
+  if(link.mode!=="anonymous")throw new UploadError("LINK_EXPIRED",403);
+  const photos=await database().sharePhoto.findMany({where:{shareLinkId:link.id,...(mediaId?{mediaId}:{})},orderBy:{position:"asc"},include:{media:{include:{useEvents:{orderBy:{version:"desc"},take:1},session:{include:{patient:true}}}}}});
+  return photos.filter(photo=>photo.media.session.patientId===link.patientId&&photo.media.useEvents[0]?.id===photo.approvalId&&eligibleAnonymousMedia(photo.media,photo.media.useEvents[0],photo.media.session.patient,photo.media.session));
 }
 export async function ticketShare(ticket:string|null) {
   const data=readTicket(ticket,"media");if(typeof data?.shareId!=="string")throw new UploadError("LINK_EXPIRED",403);
   const link=await database().shareLink.findUnique({where:{id:data.shareId},include:{patient:true}});
-  if(!link||!activeLink(link))throw new UploadError("LINK_EXPIRED",403);return link;
+  if(!link||!["consented","anonymous"].includes(link.mode)||!activeLink(link))throw new UploadError("LINK_EXPIRED",403);return link;
 }

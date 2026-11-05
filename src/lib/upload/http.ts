@@ -8,9 +8,9 @@ export async function uploadIdentity() {
   const db=database(); const clinic=await db.clinic.findUnique({where:{slug:process.env.CLINIC_SLUG??"dr-sands"}});
   if(!clinic) throw new UploadError("UPLOAD_SETUP_REQUIRED",503);
   const session=await auth();
-  if(isAllowedEmail(session?.user?.email,process.env.ALLOWED_EMAILS)) return {clinic,principalHash:principalHash(`google:${session!.user!.email!.toLowerCase()}`)};
+  if(isAllowedEmail(session?.user?.email,process.env.ALLOWED_EMAILS)) return {clinic,email:session!.user!.email!.toLowerCase(),principalHash:principalHash(`google:${session!.user!.email!.toLowerCase()}`)};
   const cookie=readCookie((await cookies()).get("posting-center-upload")?.value);
-  if(cookie && cookie.clinicId===clinic.id && cookie.passcodeVersion===principalHash(clinic.uploadPasscodeHash)) return {clinic,principalHash:principalHash(`cookie:${cookie.id}`)};
+  if(cookie && cookie.clinicId===clinic.id && cookie.passcodeVersion===principalHash(clinic.uploadPasscodeHash)) return {clinic,email:null,principalHash:principalHash(`cookie:${cookie.id}`)};
   throw new UploadError("SIGN_IN_REQUIRED",401);
 }
 export async function jsonBody(request:Request) {

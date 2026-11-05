@@ -31,7 +31,10 @@ export async function prepareFile(input:File,maxVideoMB:number):Promise<PickedFi
   const sample=new Blob([file.slice(0,65536),file.slice(Math.max(0,file.size-65536)),`${file.size}:${file.type}`]);
   const digest=await crypto.subtle.digest("SHA-256",await sample.arrayBuffer());
   const fingerprint=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
-  return {file,preview,progress:0,plan:{key:crypto.randomUUID(),fingerprint,kind:video?"video":"photo",label:"",mimeType:video?file.type:"image/jpeg",bytes:file.size,...dimensions,name:"",title:null}};
+  // Keep the sample fingerprint for old resumable manifests. Anonymous review
+  // instead binds every byte of the exact compressed photo shown to the user.
+  const contentChecksum=video?undefined:Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer())),b=>b.toString(16).padStart(2,"0")).join("");
+  return {file,preview,progress:0,plan:{key:crypto.randomUUID(),fingerprint,...(contentChecksum?{contentChecksum}:{}),kind:video?"video":"photo",label:"",mimeType:video?file.type:"image/jpeg",bytes:file.size,...dimensions,name:"",title:null}};
 }
 export async function api<T>(path:string,body?:unknown):Promise<T> {
   let response:Response;

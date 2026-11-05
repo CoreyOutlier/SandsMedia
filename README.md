@@ -564,3 +564,79 @@ Run `node --env-file=.env.upload-test scripts/resume-integration.mjs` against th
 local test server for rejected starts, missing hints, original-uploader recovery,
 strict ownership, concurrent retries, and lost-response recovery without duplicate
 patients or sessions. No schema, dependency, or environment change is required.
+
+## Anonymous photo use — 5 November 2026
+
+The owner confirmed the clinic-approved de-identification policy. Uploaders can
+choose **No written consent** and, for each reviewed dental close-up, explicitly
+check **Approved for anonymous online use**. Every unchecked photo and all videos
+remain private without written consent. This is a human clinic-policy review, not
+face detection or a claim that cropping alone is sufficient. Written consent and
+its existing exact sentence/version remain unchanged.
+
+Existing patient photos have approval/revoke controls and a separate **Download
+for anonymous use** action. The original download remains an internal private
+original; the anonymous download strips image metadata. The directory includes
+an anonymous-photo filter and counts; it never labels an entire mixed patient
+record cleared because a single photo was approved. Session Ready/Posted checks
+now require all active files in that finished session to have a posting basis.
+
+**Share anonymous photos** creates an expiring, optionally PIN-protected link to
+an explicit fixed set of approved photos. Anonymous pages, OG images, photo URLs'
+responses and ZIPs contain no patient identity or session context. Export filenames
+are photo-01.jpg etc.; no consent/audit documents are included. Existing named
+patient shares still require written consent. Public anonymous media reads never
+fall back to a raw Drive thumbnail or original.
+
+Approval history is append-only in media_use_events. Share membership is
+append-only in share_photos, pinned to each exact approval event. Both tables have
+ALWAYS-enabled UPDATE/DELETE/TRUNCATE rejection triggers and the app role has only
+SELECT/INSERT. Source and stripped-export SHA-256, Drive binary head revision/MD5, policy version,
+and patient lifecycle version prevent changed files, revocation, restoration, or
+reapproval from reviving an old link. Withdrawal/archive/deletion block both modes.
+Previously downloaded media cannot be recalled.
+
+`ANONYMOUS_USE_TEXT` and `ANONYMOUS_USE_TEXT_VERSION` live in
+src/lib/anonymous-use.ts. Bump that separate policy version if wording changes;
+never use a ConsentEvent to record an anonymous-use review. Patient photos remain
+private in Drive. The JPEG export parser reads at most 20 MiB into server memory,
+strips all APP and COM segments plus trailing data, and fails closed on unsupported
+or invalid formats. No disk, new storage service, dependency, or environment
+variable is introduced. File verification is performed again before releasing an
+anonymous response, including the single-photo download and each ZIP entry.
+
+Additive migration:
+prisma/migrations/202611050006_anonymous_photo_use/migration.sql and
+prisma/migrations/202611050007_anonymous_content_revision/migration.sql. Review
+prisma/schema.prisma before applying. `scripts/anonymous-migrate.mjs test|production`
+requires the explicitly loaded owner environment, checks database/Drive isolation,
+retains existing counts and verifies old/new append-only permissions. Normal app
+traffic continues to use the restricted runtime connection.
+
+Verification: unit tests cover JPEG metadata removal/progressive scans, exact
+approval and lifecycle matching, session readiness, public DTO privacy and fixed
+selection. `scripts/anonymous-integration.mjs` runs real synthetic Drive uploads
+against localhost:3102 and sandsmedia_upload_test only. It refuses the production
+Drive root and never prints source filenames, patient names, request bodies, raw
+errors or credentials. Test artifacts remain in ignored qa paths.
+
+Existing-photo approval requires a five-minute signed review token bound to the
+signed-in staff account, photo, exact source/export checksums, binary Drive head
+revision and current approval/patient lifecycle versions. The full review preview
+is authenticated and must load before confirmation. A changed photo or lifecycle
+state requires a fresh review. Upload approval binds the full SHA-256 of the
+compressed photo reviewed on the phone and the patient version captured at start;
+a mismatched or stale upload review saves privately instead of granting approval.
+The earlier sampled fingerprint remains unchanged solely for resume matching.
+Drive's generic File.version is deliberately not used because background thumbnail
+processing can increment it without changing the binary photo.
+
+Release verification (5 November 2026): both additive migrations are applied to
+production; aggregate existing-record counts and append-only permissions were
+verified. All 73 unit tests, type checking, production build, and authenticated-route
+smoke checks pass. The real synthetic Drive integration also passed upload-only
+staff access, mixed private/approved files, explicit selection, metadata-stripped
+exports/ZIPs, stale preview rejection, source/lifecycle changes, approval retry,
+revoke/reapprove, PIN/expiry, Ready/Posted filters, named-link consent isolation,
+archive/withdrawal/deletion, and preservation of immutable audit history. No real
+patient record was approved, shared, deleted, or modified during this verification.

@@ -6,8 +6,12 @@ import { clearance } from "@/lib/clearance";
 import { patientInclude } from "@/lib/portal/library";
 import { jsonBody,uploadResponse,uploadFailure } from "@/lib/upload/http";
 import { uuid,UploadError } from "@/lib/upload/validation";
+import { validAnonymousSelection } from "@/lib/portal/anonymous-share";
+import { verifyAnonymousPhoto } from "@/lib/portal/anonymous-use";
+export const maxDuration=300;
 export async function POST(request:Request){try{
- const {clinic,email}=await portalIdentity();const b=await jsonBody(request);if(!uuid(b.patientId)||![1,7,30].includes(b.days??7)||b.pin&&!/^\d{4}$/.test(b.pin))throw new UploadError("INVALID_FIELDS");
+ const {clinic,email}=await portalIdentity();const b=await jsonBody(request);if(!b||typeof b!=="object"||Array.isArray(b))throw new UploadError("INVALID_FIELDS");const mode=b.mode??"consented";
+ if(!uuid(b.patientId)||![1,7,30].includes(b.days??7)||!["consented","anonymous"].includes(mode)||(b.pin!==undefined&&(typeof b.pin!=="string"||b.pin!==""&&!/^\d{4}$/.test(b.pin)))||mode==="anonymous"&&!validAnonymousSelection(b.mediaIds)||mode==="consented"&&b.mediaIds!==undefined)throw new UploadError("INVALID_FIELDS");
  await rateLimit(`share-create:${clinic.id}`,request,30);
  // Fail before creating a link if signing has not been configured.
  signTicket({expires:Date.now()+1000},"setup");
@@ -15,7 +19,22 @@ export async function POST(request:Request){try{
  await database().$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`patient:${b.patientId}`}))`;
    const p=await tx.patient.findFirst({where:{id:b.patientId,clinicId:clinic.id,deletedAt:null},include:patientInclude});
-   if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);if(clearance(p).status!=="cleared")throw new UploadError("CONSENT_REQUIRED",409);
-   await tx.shareLink.create({data:{patientId:p.id,tokenHash:hashToken(token),pinHash,createdBy:email,expiresAt:new Date(Date.now()+(b.days??7)*86400000)}});
- });return uploadResponse({url:new URL(`/s/${token}`,process.env.APP_URL).href,days:b.days??7});
+   if(!p)throw new UploadError("PATIENT_NOT_FOUND",404);
+   if(p.archivedAt)throw new UploadError("PATIENT_ARCHIVED",409);
+   if(p.consentWithdrawnAt)throw new UploadError("CONSENT_REQUIRED",409);
+   if(mode==="consented"&&clearance(p).status!=="cleared")throw new UploadError("CONSENT_REQUIRED",409);
+   const photos:{mediaId:string;approvalId:string;position:number}[]=[];
+   if(mode==="anonymous"){
+    // The patient lock serializes revocation, approval, deletion and lifecycle
+    // changes. Verify the current Drive revision before pinning each approval.
+    const ids=b.mediaIds as string[];
+    for(let offset=0;offset<ids.length;offset+=4){
+     const group=await Promise.all(ids.slice(offset,offset+4).map(async(mediaId,index)=>{
+      const event=await verifyAnonymousPhoto(mediaId,{patientId:p.id,signal:request.signal});
+      return {mediaId,approvalId:event.id,position:offset+index};
+     }));photos.push(...group);
+    }
+   }
+   await tx.shareLink.create({data:{patientId:p.id,mode,tokenHash:hashToken(token),pinHash,createdBy:email,expiresAt:new Date(Date.now()+(b.days??7)*86400000),...(mode==="anonymous"?{photos:{create:photos}}:{})}});
+ },{maxWait:10000,timeout:120000});return uploadResponse({url:new URL(`/s/${token}`,process.env.APP_URL).href,days:b.days??7});
 }catch(e){return uploadFailure(e);}}

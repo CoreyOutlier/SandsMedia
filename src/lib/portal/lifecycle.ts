@@ -1,6 +1,7 @@
 import { database } from "@/lib/db";
 import { CONSENT_TEXT,CONSENT_TEXT_VERSION,validateConsentVersion } from "@/lib/consent";
-import { clearance } from "@/lib/clearance";
+import { sessionOnlineReady } from "./posting-policy";
+import { verifyAnonymousPhoto } from "./anonymous-use";
 import { patientInclude } from "./library";
 import { portalIdentity,requestIdentity } from "./access";
 import { canCompleteRenewal } from "./lifecycle-policy";
@@ -29,11 +30,17 @@ export async function patientAction(id:string,identity:Identity,body:Record<stri
    if(p.archivedAt){await tx.patient.update({where:{id},data:{archivedAt:null,lifecycleVersion:{increment:1}}});action="restored";}
   }else if(body.action==="status"&&uuid(body.sessionId)&&["ready","posted"].includes(String(body.status))){
    const current=await tx.patient.findUniqueOrThrow({where:{id},include:patientInclude});
-   if(clearance(current).status!=="cleared"||!current.sessions.some(s=>s.id===body.sessionId))throw new UploadError("CONSENT_REQUIRED",409);
+   const target=current.sessions.find(s=>s.id===body.sessionId);
+   if(!target||!sessionOnlineReady(current,target))throw new UploadError("CONSENT_REQUIRED",409);
+   if(!target.consentEvents.some(e=>e.consented)){
+    for(let offset=0;offset<target.media.length;offset+=4){
+     await Promise.all(target.media.slice(offset,offset+4).map(m=>verifyAnonymousPhoto(m.id,{approvalId:m.useEvents[0].id,patientId:id})));
+    }
+   }
    await tx.session.update({where:{id:body.sessionId},data:{status:body.status as "ready"|"posted"}});
   }else throw new UploadError("INVALID_FIELDS");
   if(action)await tx.patientActivity.create({data:{patientId:id,action,actor:identity.email,patientVersion:p.lifecycleVersion+1}});
- },{maxWait:10000,timeout:20000});
+ },{maxWait:10000,timeout:120000});
 }
 
 async function renewConsent(id:string,identity:Identity,body:Record<string,unknown>,request:Request){

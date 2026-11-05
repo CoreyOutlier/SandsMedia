@@ -299,3 +299,48 @@ records. Confirm the exact scope before deletion and show actionable progress,
 success and retry feedback. Pending Drive cleanup remains inaccessible and can be
 retried through the same action or Settings → Check storage. No public page or
 upload-passcode identity may delete records.
+
+## Owner-approved anonymous photo use — 5 November 2026
+
+The owner confirmed that the clinic has an approved policy for online use of
+reviewed, de-identified dental close-ups without written patient authorization.
+This adds a separate, per-photo posting basis; it does not change or fabricate
+written patient consent. Merely cropping a face or choosing a Before/After label
+never grants permission.
+
+- Each patient photo can be explicitly marked **Approved for anonymous online
+  use**, with the clinic-policy attestation shown beside the control. Default is
+  off. Videos and Other uploads cannot use this approval. No-written-consent
+  uploads continue to save privately whether or not any photos are approved.
+- The policy sentence/version are separate constants from CONSENT_TEXT_VERSION.
+  Append-only MediaUseEvent records who approved/revoked, the exact policy text,
+  patient lifecycle version, binary Drive head revision, and source/export SHA-256 checksums.
+- Existing photos can be reviewed in the dashboard. Revocation appends history
+  and revokes anonymous links containing that photo. Withdrawal, archive, deletion,
+  a changed file, or a changed policy invalidates approval. Restoring a patient or
+  reapproving a photo never restores an old anonymous link.
+- Anonymous shares contain an explicit fixed selection of approved photos only.
+  They retain hashed tokens, expiry, optional PIN, view history, and revocation.
+  No patient name/initials/display ID, session dates, treatment, description,
+  testimonial, custom title, uploader, or original filename appears publicly.
+  Their preview image is generic. Named patient links retain written-consent rules.
+- Anonymous thumbnails, single downloads and ZIPs use the exact approved JPEG
+  with APP/EXIF/XMP/IPTC/comments/trailing metadata removed and generic filenames.
+  They never use Drive thumbnails or expose originals. Every response verifies
+  current approval and content. ZIP membership is pinned to approval events.
+- Private directory search includes an **Approved anonymous photos** filter and
+  individual badges/counts. A completed session can be marked posted only when
+  every active file has written consent or valid anonymous-photo approval. Mixed
+  uploads never acquire blanket patient clearance.
+
+Implementation exception to the original stream-only wording: anonymous JPEG
+verification/sanitization uses bounded server memory with a 20 MiB source-file cap. Uploads
+remain browser-to-Drive; nothing is written to Vercel disk or another file store.
+This is needed to verify and remove metadata before any anonymous bytes leave the
+server. No new package or environment variable is required.
+
+Existing-photo approval uses an authenticated full-photo review and a five-minute
+signed token binding the exact reviewed content and lifecycle state. Upload review
+binds the full compressed-photo SHA-256 and patient version at upload start; stale
+reviews save privately and require a new dashboard review. Drive processing-only
+metadata revisions must not invalidate an unchanged image.

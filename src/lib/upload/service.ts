@@ -7,6 +7,8 @@ import { seal, unseal } from "./security";
 import { uploadIdentity } from "./http";
 import { isIP } from "node:net";
 import { MAX_VIDEO_MB, validVideoDuration } from "./limits";
+import { eligibleAnonymousMedia } from "@/lib/anonymous-use";
+import { recordUploadAnonymousApproval } from "@/lib/portal/anonymous-use";
 type Identity=Awaited<ReturnType<typeof uploadIdentity>>;
 type Tx=Prisma.TransactionClient;
 const include={session:{include:{patient:true}},generalUpload:true} as const;
@@ -52,6 +54,9 @@ export async function startBatch(raw:unknown,identity:Identity) {
         patient=await tx.patient.create({data:{clinicId:c.id,displayId:`DS-${String(c.nextPatientNumber-1).padStart(4,"0")}`,firstName:data.firstName,lastName:data.lastName}});
       }
       if(patient.archivedAt) throw new UploadError("PATIENT_ARCHIVED",409);
+      // This epoch is server-owned. A checkbox from before archive/withdrawal
+      // or restoration cannot silently approve a later private upload.
+      for(const file of data.files)if(file.anonymousApproved)file.anonymousPatientVersion=patient.lifecycleVersion;
       const s=await tx.session.create({data:{uploadId:data.uploadId,patientId:patient.id,treatment:data.title,description:data.description,uploadedBy:data.uploadedBy,date:new Date(data.date)}}); sessionId=s.id;
     }
     const batch=await tx.uploadBatch.create({data:{id:data.uploadId,clinicId:identity.clinic.id,sessionId,generalUploadId,principalHash:identity.principalHash,consented:data.consented,formOnFile:data.formOnFile,manifest:data.files as unknown as Prisma.InputJsonValue},include});
@@ -110,12 +115,15 @@ export async function confirmFile(id:string,key:string,identity:Identity) {
     if(file.kind==="photo" && (!image?.width || !image.height || Math.max(image.width,image.height)>2048)) throw new UploadError("FILE_NOT_CONFIRMED",409);
     const meta=actual.videoMediaMetadata; if(file.kind==="video" && meta?.durationMillis!=null && !validVideoDuration(Number(meta.durationMillis)/1000)) throw new UploadError("VIDEO_TOO_LONG");
     const common={driveFileId:file.driveId,fileName:file.name,title:file.title??null,kind:file.kind,position:files.indexOf(file),bytes:BigInt(file.bytes),width:file.width,height:file.height,durationS:file.durationS};
-    if(batch.sessionId) await tx.media.create({data:{...common,sessionId:batch.sessionId,label:file.label}});
+    if(batch.sessionId) {
+      const media=await tx.media.create({data:{...common,sessionId:batch.sessionId,label:file.label}});
+      await recordUploadAnonymousApproval(tx,media.id,file,identity);
+    }
     else await tx.generalMedia.create({data:{...common,generalUploadId:batch.generalUploadId!}});
     file.confirmed=true; delete file.encryptedUrl;
     await tx.uploadBatch.update({where:{id},data:{manifest:files as unknown as Prisma.InputJsonValue}});
     return {confirmed:true};
-  },{timeout:30000});
+  },{timeout:60000,maxWait:10000});
 }
 export async function renewFile(id:string,key:string,identity:Identity) {
   await database().$transaction(async tx=>{await lock(tx,`batch:${id}`); const batch=await ownedBatch(tx,id,identity,true); const files=batch.manifest as unknown as FilePlan[]; const f=files.find(f=>f.key===key&&!f.deletedAt); if(!f)throw new UploadError("FILE_NOT_FOUND",404); delete f.encryptedUrl; await tx.uploadBatch.update({where:{id},data:{manifest:files as unknown as Prisma.InputJsonValue}});});
@@ -149,6 +157,8 @@ export async function finishBatch(id:string,identity:Identity,request:Request) {
     const folder=await getDriveFile(item.driveFolderId);
     if(!folder?.name || folder.trashed)throw new UploadError("DRIVE_UNAVAILABLE",503);
     const patient=batch.session?.patient;
-    return {saved:true,count:files.length,consented:batch.consented,consentWithdrawn:!!patient?.consentWithdrawnAt,general:!!batch.generalUpload,patientId:patient?.id,driveUrl:`https://drive.google.com/drive/folders/${item.driveFolderId}`,path:`Posting Center / ${patient?`Patients / ${patientFolderName(patient.firstName,patient.lastName,patient.displayId)}`:"Other uploads"} / ${folder.name}`};
+    const reviewed=batch.session?await tx.media.findMany({where:{sessionId:batch.session.id,deletedAt:null},include:{useEvents:{orderBy:{version:"desc"},take:1}}}):[];
+    const anonymousCount=patient?reviewed.filter(media=>eligibleAnonymousMedia(media,media.useEvents[0],patient,{finishedAt:item.finishedAt??new Date()})).length:0;
+    return {saved:true,count:files.length,consented:batch.consented,consentWithdrawn:!!patient?.consentWithdrawnAt,anonymousCount,general:!!batch.generalUpload,patientId:patient?.id,driveUrl:`https://drive.google.com/drive/folders/${item.driveFolderId}`,path:`Posting Center / ${patient?`Patients / ${patientFolderName(patient.firstName,patient.lastName,patient.displayId)}`:"Other uploads"} / ${folder.name}`};
   },{timeout:60000});
 }

@@ -16,7 +16,7 @@ export async function reconcile(clinicId:string){
  let recovered=0,missing=0,mismatched=0,unfinished=0;
  for(const b of batches){const item=b.session??b.generalUpload!;if(!item.finishedAt)unfinished++;
   for(const plan of b.manifest as unknown as FilePlan[]){if(!plan.driveId||plan.deletedAt)continue;const actual=remote.get(plan.driveId);if(plan.confirmed&&!actual){missing++;continue;}if(actual&&!actual.parents?.includes((plan.kind==="photo"?b.photosFolderId:b.videosFolderId)??"")){mismatched++;continue;}
-   if(!plan.confirmed&&actual){try{await confirmFile(b.id,plan.key,{clinic,principalHash:b.principalHash});recovered++;}catch{mismatched++;}}
+   if(!plan.confirmed&&actual){try{await confirmFile(b.id,plan.key,{clinic,principalHash:b.principalHash,email:null});recovered++;}catch{mismatched++;}}
   }
  }
  return {checked:batches.length,recovered,missing,mismatched,unfinished,deletionCleanupCompleted:deletionCleanup.completed,deletionCleanupPending:deletionCleanup.pending,checkedAt:new Date().toISOString()};
