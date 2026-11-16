@@ -479,6 +479,13 @@ tooling. Never expose provisioning/owner credentials to the deployed app.
 Google OAuth allows only `https://sandsmedia-platform.vercel.app/api/auth/callback/google`.
 Keep APP_URL at `https://sandsmedia-platform.vercel.app`. Any future custom domain
 must have verified owner authorization and DNS access before configuration.
+Sign-in explicitly asks users to select their approved work Google account. The
+allowlist must contain the verified primary email Google returns, not merely an
+email alias; matching ignores capitalization. After changing ALLOWED_EMAILS in
+production, deploy again and confirm the list under Settings → Approved Google
+accounts. `npm run test:auth` checks the real local authorization redirect with
+mocked public discovery metadata, including account selection, PKCE, scopes and
+callback origin; it does not sign in to a real Google account.
 OAuth client secrets, Neon
 connection credentials, service-account keys and passcodes belong in secure settings,
 not chat, source code, screenshots, or git.

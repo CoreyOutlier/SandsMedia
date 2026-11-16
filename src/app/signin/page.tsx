@@ -25,8 +25,8 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
     <div className="signin-content"><section className="signin-story"><p className="eyebrow">The Dr. Sands media portal</p><h1>Every smile.<br/>Every story.<br/><span>One place.</span></h1>
       <p className="signin-intro">A private home for the photos and footage behind the practice.</p>
       <div className="library-previews"><div><Icon name="patients"/><h2>Patients</h2><p>Before and afters, testimonials,<br/>and consent in one place.</p></div><div><Icon name="media"/><h2>Other uploads</h2><p>Raw footage, team content,<br/>and everyday clinic moments.</p></div></div>
-    </section><section className="signin-card" aria-labelledby="signin-heading"><span className="eyebrow">Welcome to Posting Center</span><h2 id="signin-heading">Your work starts here.</h2><p>Sign in with your approved Google account to access the private media libraries.</p>
-      {error && <p className="form-error" role="alert">We couldn’t sign you in. Use an approved Google account, or contact your administrator.</p>}
+    </section><section className="signin-card" aria-labelledby="signin-heading"><span className="eyebrow">Welcome to Posting Center</span><h2 id="signin-heading">Your work starts here.</h2><p>Choose your approved work Google account to access the private media libraries.</p>
+      {error && <p className="form-error" role="alert">We couldn’t sign you in. Try again and choose your approved work Google account. If access is still blocked, contact your administrator.</p>}
       <form action={login}><button className="button primary" disabled={!ready}><span className="google-g" aria-hidden="true">G</span>{ready ? "Sign in with Google" : "Sign-in available soon"}<Icon name="arrow"/></button></form>
       {!ready && <p className="setup-copy">We’re finishing the secure connection. Please check back shortly.</p>}
       <div className="signin-card-footer"><Icon name="lock"/><span>For authorized clinic and agency team members.</span></div>
